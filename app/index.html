@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuVoWerk</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "@material/web/": "https://esm.run/@material/web/"
+            }
+        }
+    </script>
+    <script type="module">
+        import '@material/web/textfield/outlined-text-field.js';
+    </script>
+</head>
+<body>
+    <!-- Name Setup Modal -->
+    <div id="nameModal" class="md3-scrim">
+        <div class="md3-dialog">
+            <div class="md3-dialog-header">
+                <span class="material-icons-round md3-dialog-icon">book</span>
+                <h2 class="md3-dialog-headline">Willkommen bei BuVoWerk</h2>
+            </div>
+            
+            <div class="md3-dialog-content">
+                <div class="md3-text-field-container">
+                    <md-outlined-text-field 
+                        id="nameInput" 
+                        label="Dein Name"
+                        autocomplete="name">
+                    </md-outlined-text-field>
+                </div>
+            </div>
+            
+            <div class="md3-dialog-actions">
+                <button id="viewerModeBtn" class="md3-button md3-button-text">
+                    <span class="material-icons-round">visibility</span>
+                    <span>Nur zuschauen</span>
+                </button>
+                <button id="saveNameBtn" class="md3-button md3-button-filled">
+                    <span class="material-icons-round">person_add</span>
+                    <span>Teilnehmen</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Book Modal -->
+    <div id="editModal" class="md3-scrim">
+        <div class="md3-dialog md3-dialog-fullscreen">
+            <div class="md3-dialog-header">
+                <button id="cancelEditBtn" class="md3-icon-button">
+                    <span class="material-icons-round">close</span>
+                </button>
+                <h2 class="md3-dialog-headline">Buch bearbeiten</h2>
+                <button id="saveEditBtn" class="md3-button md3-button-text">
+                    <span class="material-icons-round">save</span>
+                    <span>Speichern</span>
+                </button>
+            </div>
+            
+            <div class="md3-dialog-content">
+                <div class="md3-form-grid">
+                    <md-outlined-text-field 
+                        id="editBookTitle" 
+                        label="Titel *" 
+                        required>
+                    </md-outlined-text-field>
+                    
+                    <md-outlined-text-field 
+                        id="editBookAuthor" 
+                        label="Autor *" 
+                        required>
+                    </md-outlined-text-field>
+                    
+                    <md-outlined-text-field 
+                        id="editBookPages" 
+                        label="Seitenzahl"
+                        type="number" 
+                        min="1">
+                    </md-outlined-text-field>
+                    
+                    <md-outlined-text-field 
+                        id="editBookYear" 
+                        label="Erscheinungsjahr"
+                        type="number" 
+                        min="1800" 
+                        max="2030">
+                    </md-outlined-text-field>
+                    
+                    <md-outlined-text-field 
+                        id="editBookDescription" 
+                        label="Beschreibung"
+                        type="textarea" 
+                        rows="3"
+                        class="md3-text-field-full-width">
+                    </md-outlined-text-field>
+                </div>
+                
+                <div class="md3-dialog-actions md3-dialog-actions-bottom">
+                    <button id="deleteBookBtn" class="md3-button md3-button-text md3-button-error">
+                        <span class="material-icons-round">delete</span>
+                        <span>Löschen</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="md3-surface">
+        <!-- Top App Bar -->
+        <header class="md3-top-app-bar">
+            <div class="md3-top-app-bar-content">
+                <span class="material-icons-round md3-top-app-bar-leading-icon">book</span>
+                <h1 class="md3-top-app-bar-headline">BuVoWerk - Buch-Vorschlags Werkzeug</h1>
+                <div class="md3-top-app-bar-trailing" id="userInfo">
+                    <span class="md3-top-app-bar-user-text">Hallo, <strong id="currentUser"></strong>!</span>
+                    <button id="logoutBtn" class="md3-icon-button" title="Ausloggen">
+                        <span class="material-icons-round">logout</span>
+                    </button>
+                </div>
+                <div class="md3-top-app-bar-trailing" id="viewerInfo" style="display: none;">
+                    <span class="md3-top-app-bar-user-text">Zuschauer Modus</span>
+                    <button id="joinWithNameBtn" class="md3-button md3-button-outlined">
+                        <span class="material-icons-round">person_add</span>
+                        <span>Beitreten</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="md3-main-content">
+            <!-- Add Book Section -->
+            <section class="md3-card md3-add-book-card" id="addBookSection">
+                <div class="md3-card-content">
+                    <div class="md3-card-header">
+                        <span class="material-icons-round md3-card-icon">add_box</span>
+                        <h2 class="md3-card-headline">Buch vorschlagen</h2>
+                    </div>
+                    
+                    <div class="md3-form-grid">
+                        <md-outlined-text-field 
+                            id="bookTitle" 
+                            label="Titel *" 
+                            required>
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookAuthor" 
+                            label="Autor *" 
+                            required>
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookPages" 
+                            label="Seitenzahl"
+                            type="number" 
+                            min="1">
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookYear" 
+                            label="Erscheinungsjahr"
+                            type="number" 
+                            min="1800" 
+                            max="2030">
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookDescription" 
+                            label="Beschreibung (optional)"
+                            type="textarea" 
+                            rows="3"
+                            class="md3-text-field-full-width">
+                        </md-outlined-text-field>
+                    </div>
+                    
+                    <div class="md3-card-actions">
+                        <button id="addBookBtn" class="md3-button md3-button-filled">
+                            <span class="material-icons-round">add</span>
+                            <span>Vorschlag hinzufügen</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Books List Section -->
+            <section class="md3-books-section">
+                <div class="md3-section-header">
+                    <div class="md3-section-header-top">
+                        <h2 class="md3-section-headline">Buchvorschläge</h2>
+                        
+                        <div class="md3-filter-dropdown">
+                            <select id="userFilter" class="md3-filter-select">
+                                <option value="all">Alle Vorschlagenden</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Filter Tabs -->
+                    <div class="md3-tabs" id="filterTabs">
+                        <button class="md3-tab md3-tab-active" data-filter="all">
+                            <span class="material-icons-round">library_books</span>
+                            <span>Alle Bücher</span>
+                        </button>
+                        <button class="md3-tab" data-filter="my" id="myBooksTab">
+                            <span class="material-icons-round">person</span>
+                            <span>Meine Vorschläge</span>
+                        </button>
+                        <button class="md3-tab" data-filter="liked" id="likedBooksTab">
+                            <span class="material-icons-round">favorite</span>
+                            <span>Meine Favoriten</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="booksList" class="md3-books-grid">
+                    <!-- Books will be loaded here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Loading indicator -->
+    <div id="loadingIndicator" class="md3-circular-progress-container">
+        <div class="md3-circular-progress">
+            <svg viewBox="0 0 48 48">
+                <circle cx="24" cy="24" r="18" fill="none" stroke-width="4"/>
+            </svg>
+        </div>
+        <p class="md3-loading-text">Lädt...</p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
