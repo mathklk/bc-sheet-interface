@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Sheets Integration - Einladungslink Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #1976d2;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #1565c0;
+        }
+        .generated-link {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 4px;
+        }
+        .generated-link a {
+            color: #1976d2;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff3e0;
+            border: 1px solid #ffcc02;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Sheets Integration - Einladungslink Generator</h1>
+        
+        <div class="info">
+            <strong>Anleitung:</strong>
+            <ol>
+                <li>Spreadsheet ID: Die ID aus der Google Sheets URL (der Teil nach /d/ und vor /edit)</li>
+                <li>Sheet Name: Der Name des Tabs/Blatts in der Tabelle</li>
+                <li>API Key: Dein Google Sheets API Key</li>
+            </ol>
+            <p>Die Tabelle sollte in Zeile 5 beginnen mit den Spalten: SuggestedBy, Funfacts, Buchtitel, Autor, Jahr, Seitenzahl, Genres, Kurzbeschreibung</p>
+        </div>
+        
+        <form id="inviteLinkForm">
+            <div class="form-group">
+                <label for="sheetsId">Google Sheets ID:</label>
+                <input type="text" id="sheetsId" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms" required>
+                <small style="color: #666; margin-top: 5px; display: block;">
+                    Beispiel URL: https://docs.google.com/spreadsheets/d/<strong>1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms</strong>/edit<br>
+                    Kopiere nur den fett markierten Teil (die ID)
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="sheetName">Sheet Name:</label>
+                <input type="text" id="sheetName" placeholder="z.B. Buchclub" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="apiKey">Google API Key:</label>
+                <input type="text" id="apiKey" placeholder="AIzaSyC..." required>
+            </div>
+            
+            <button type="submit">Einladungslink generieren</button>
+        </form>
+        
+        <div id="generatedLink" class="generated-link" style="display: none;">
+            <strong>Generierter Einladungslink:</strong><br>
+            <a id="linkUrl" href="#" target="_blank"></a>
+            <br><br>
+            <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('inviteLinkForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const sheetsId = document.getElementById('sheetsId').value.trim();
+            const sheetName = document.getElementById('sheetName').value;
+            const apiKey = document.getElementById('apiKey').value;
+            
+            if (!sheetsId || !sheetName || !apiKey) {
+                alert('Bitte fülle alle Felder aus');
+                return;
+            }
+            
+            // Validate that it looks like a spreadsheet ID (basic check)
+            if (sheetsId.length < 20 || sheetsId.includes('/')) {
+                alert('Bitte gib nur die Spreadsheet ID ein, nicht die vollständige URL');
+                return;
+            }
+            
+            // Create the invite link
+            const baseUrl = window.location.origin + window.location.pathname.replace('invite.html', 'index.html');
+            const inviteLink = `${baseUrl}?d=${encodeURIComponent(sheetsId)}&s=${encodeURIComponent(sheetName)}&k=${encodeURIComponent(apiKey)}`;
+            
+            // Show the generated link
+            document.getElementById('linkUrl').href = inviteLink;
+            document.getElementById('linkUrl').textContent = inviteLink;
+            document.getElementById('generatedLink').style.display = 'block';
+        });
+        
+        function copyToClipboard() {
+            const linkText = document.getElementById('linkUrl').textContent;
+            navigator.clipboard.writeText(linkText).then(function() {
+                alert('Link in die Zwischenablage kopiert!');
+            }, function(err) {
+                console.error('Fehler beim Kopieren: ', err);
+                alert('Kopieren fehlgeschlagen. Bitte kopiere den Link manuell.');
+            });
+        }
+    </script>
+</body>
+</html>
