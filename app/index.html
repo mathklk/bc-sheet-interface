@@ -40,13 +40,76 @@
                             </svg>
                         </div>
                         <h3 style="margin-bottom: 16px; font-weight: 500; color: var(--md-sys-color-on-surface);">Verbinde mit Google</h3> -->
-                        <p style="color: #666; margin-bottom: 20px;">Um BuVoWerk zu nutzen, musst du dich mit deinem Google-Konto anmelden.</p>
+                        <p style="color: #c0c0c0; margin-bottom: 20px;">Um BuVoWerk zu nutzen, musst du dich mit deinem Google-Konto anmelden.</p>
                         <button id="signInBtn" class="md3-button md3-button-filled">
                             <span class="material-icons-round">account_circle</span>
                             <span>Mit Google anmelden</span>
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="md3-scrim">
+        <div class="md3-dialog">
+            <div class="md3-dialog-header">
+                <button id="closeConfigBtn" class="md3-icon-button">
+                    <span class="material-icons-round">close</span>
+                </button>
+                <span class="material-icons-round md3-dialog-icon">settings</span>
+                <h2 class="md3-dialog-headline">Einladung erstellen</h2>
+            </div>
+            
+            <div class="md3-dialog-content">
+                <div class="md3-text-field-container">
+                    <p style="margin-bottom: 20px;">Du bist noch keiner Gruppe beigetreten. Nutze zum Beitreten einen <b>Einladungslink</b>, oder erstelle selbst einen.</p>
+                    
+                    <md-outlined-text-field 
+                        id="configSheetUrl" 
+                        label="Google Sheet URL" 
+                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                        class="md3-text-field-full-width">
+                        <span slot="leading-icon" class="material-icons-round">link</span>
+                    </md-outlined-text-field>
+                    
+                    <md-outlined-text-field 
+                        id="configSheetName" 
+                        label="Sheet Name" 
+                        placeholder="Tabelle1"
+                        class="md3-text-field-full-width">
+                        <span slot="leading-icon" class="material-icons-round">table_chart</span>
+                    </md-outlined-text-field>
+                    
+                    <md-outlined-text-field 
+                        id="configClientId" 
+                        label="OAuth Client ID" 
+                        placeholder="...apps.googleusercontent.com"
+                        class="md3-text-field-full-width">
+                        <span slot="leading-icon" class="material-icons-round">key</span>
+                    </md-outlined-text-field>
+                    
+                    <div id="inviteLink" style="margin-top: 20px; display: none;">
+                        <p style="margin-bottom: 10px;">Dein Einladungslink:</p>
+                        <div class="md3-text-field-container">
+                            <md-outlined-text-field 
+                                id="generatedLink" 
+                                readonly
+                                class="md3-text-field-full-width">
+                                <button slot="trailing-icon" class="md3-icon-button" onclick="copyInviteLink()">
+                                    <span class="material-icons-round">content_copy</span>
+                                </button>
+                            </md-outlined-text-field>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="md3-dialog-actions">
+                <button id="generateLinkBtn" class="md3-button md3-button-filled">
+                    <span>Link generieren</span>
+                </button>
             </div>
         </div>
     </div>
@@ -195,7 +258,7 @@
                         <div class="md3-card-header-content">
                             <span class="material-icons-round md3-card-icon">edit_note</span>
                             <div class="md3-card-header-text">
-                                <h2 class="md3-card-headline">Neuen Buchvorschlag erstellen</h2>
+                                <h2 class="md3-card-headline">Neues Buch vorschlagen</h2>
                                 <!-- <p class="md3-card-subhead">Teile deine Buchempfehlung mit der Gruppe</p> -->
                             </div>
                         </div>
@@ -298,6 +361,11 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Book Detail Modal -->
+    <div id="bookDetailModal" class="md3-scrim">
+        <!-- Content will be dynamically populated -->
     </div>
 
     <!-- Loading indicator -->

@@ -91,7 +91,7 @@ function handleInviteRoute() {
     
     // Check if we have all required configuration
     if (!SHEETS_ID || !SHEETS_NAME || !CLIENT_ID) {
-        showError('Google Sheets Konfiguration fehlt. Bitte verwende den Einladungslink.');
+        showConfigModal();
         return;
     }
     
@@ -125,6 +125,12 @@ function initializeApp() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Config modal close button
+    document.getElementById('closeConfigBtn').addEventListener('click', hideConfigModal);
+    
+    // Config modal generate link button
+    document.getElementById('generateLinkBtn').addEventListener('click', generateInviteLink);
+    
     // Logout button
     document.getElementById('logoutBtn').addEventListener('click', logout);
     
@@ -254,22 +260,29 @@ async function loadAvailableNames() {
         }
         
         // Fetch data from Google Sheets to get available names using OAuth2
-        const range = `${SHEETS_NAME}!A5:A1000`; // Only get SuggestedBy column
+        const range = `${SHEETS_NAME}!I4:Z4`; // Names are stored in row 4, starting from column I
         
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: SHEETS_ID,
             range: range,
         });
         
-        const rows = response.result.values || [];
+        const nameRow = response.result.values?.[0] || [];
         
-        // Extract unique names from the SuggestedBy column
-        const uniqueNames = [...new Set(
-            rows
-                .map(row => row[0]) // Get first column (SuggestedBy)
-                .filter(name => name && name.trim()) // Filter out empty values
-                .map(name => name.trim()) // Trim whitespace
-        )].sort(); // Sort alphabetically
+        // Process names until we find a duplicate or empty cell
+        const uniqueNames = [];
+        const seenNames = new Set();
+        
+        for (const name of nameRow) {
+            if (!name || !name.trim() || seenNames.has(name.trim())) {
+                break; // Stop at first empty cell or duplicate
+            }
+            seenNames.add(name.trim());
+            uniqueNames.push(name.trim());
+        }
+        
+        // Sort alphabetically
+        uniqueNames.sort();
         
         // Create the button grid
         const nameButtonGrid = document.getElementById('nameButtonGrid');
@@ -350,6 +363,54 @@ function hideNameModal() {
     modal.classList.remove('show');
 }
 
+function showConfigModal() {
+    const modal = document.getElementById('configModal');
+    modal.classList.add('show');
+    
+    // Hide other modals
+    hideAuthModal();
+    hideNameModal();
+}
+
+function hideConfigModal() {
+    const modal = document.getElementById('configModal');
+    modal.classList.remove('show');
+}
+
+function generateInviteLink() {
+    const sheetUrl = document.getElementById('configSheetUrl').value.trim();
+    const sheetName = document.getElementById('configSheetName').value.trim();
+    const clientId = document.getElementById('configClientId').value.trim();
+    
+    if (!sheetUrl || !sheetName || !clientId) {
+        showError('Bitte fülle alle Felder aus.');
+        return;
+    }
+    
+    // Extract sheet ID from URL
+    const sheetId = extractSpreadsheetId(sheetUrl);
+    if (!sheetId) {
+        showError('Ungültige Google Sheet URL.');
+        return;
+    }
+    
+    // Generate the invite link
+    const baseUrl = window.location.origin + window.location.pathname;
+    const inviteLink = `${baseUrl}?d=${encodeURIComponent(sheetId)}&s=${encodeURIComponent(sheetName)}&c=${encodeURIComponent(clientId)}`;
+    
+    // Show the generated link
+    document.getElementById('inviteLink').style.display = 'block';
+    document.getElementById('generatedLink').value = inviteLink;
+}
+
+function copyInviteLink() {
+    const linkInput = document.getElementById('generatedLink');
+    linkInput.select();
+    document.execCommand('copy');
+    
+    showSuccess('Link wurde in die Zwischenablage kopiert!');
+}
+
 // UI Mode functions
 function updateUIForUserMode() {
     const userInfo = document.getElementById('userInfo');
@@ -381,11 +442,16 @@ function logout() {
     books = [];
     currentFilter = 'all';
     
-    // Hide user info and show auth modal
+    // Hide user info and show config modal if no configuration is present
     document.getElementById('userInfo').style.display = 'none';
     document.getElementById('addBookSection').style.display = 'none';
     
-    showAuthModal();
+    const SHEETS_ID = getCookie('sheets_id');
+    if (!SHEETS_ID || !SHEETS_NAME || !CLIENT_ID) {
+        showConfigModal();
+    } else {
+        showAuthModal();
+    }
 }
 
 function clearForm() {
@@ -482,14 +548,14 @@ async function loadBooks() {
         
         // Use Google Sheets API v4 with OAuth2
         const spreadsheetId = SHEETS_ID;
-        const range = `${SHEETS_NAME}!A5:H1000`; // Adjust range as needed
+        const range = `${SHEETS_NAME}!A5:Z1000`; // Include all columns up to Z for likes
         
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: spreadsheetId,
             range: range,
         });
         
-        books = parseGoogleSheetsData(response.result.values || []);
+        books = await parseGoogleSheetsData(response.result.values || []);
         renderBooks();
         
     } catch (error) {
@@ -519,12 +585,29 @@ function extractSpreadsheetId(url) {
     return match ? match[1] : null;
 }
 
-function parseGoogleSheetsData(rows) {
+async function parseGoogleSheetsData(rows) {
     const books = [];
     
-    // Load local likes data
-    const likesKey = 'bookclub_likes';
-    const likes = JSON.parse(getCookie(likesKey) || '{}');
+    try {
+    const range = `${SHEETS_NAME}!I4:Z4`;
+    const userRow = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: getCookie('sheets_id'),
+        range: range,
+    }).then(response => response.result.values?.[0] || []);
+
+    // Create map of username to column index
+    const userColumnMap = {};
+    const seenNames = new Set();
+    
+    // Process names until we find a duplicate or empty cell
+    for (let i = 0; i < userRow.length; i++) {
+        const name = userRow[i] ? userRow[i].trim() : '';
+        if (!name || seenNames.has(name)) {
+            break; // Stop at first empty cell or duplicate
+        }
+        seenNames.add(name);
+        userColumnMap[name] = i; // Store array index (0 = column I)
+    }
     
     for (const row of rows) {
         // Skip empty rows
@@ -545,13 +628,28 @@ function parseGoogleSheetsData(rows) {
         
         // Load likes from local storage
         const bookKey = `${book.title}_${book.author}`;
-        book.likes = likes[bookKey] || [];
-        book.likeCount = book.likes.length;
+        // Get likes from the sheet - check each user's column for this row
+        book.likes = [];
+        // Check each user's column (starting from column I = index 8)
+        Object.entries(userColumnMap).forEach(([username, relativeIndex]) => {
+            const columnIndex = 8 + relativeIndex; // Column I starts at index 8
+            // Make sure the row has enough columns and the cell has content
+            if (row.length > columnIndex && row[columnIndex] && row[columnIndex].trim()) {
+                book.likes.push({
+                    user: username
+                });
+            }
+        });
         
+        book.likeCount = book.likes.length;
         books.push(book);
     }
     
     return books;
+    } catch (error) {
+        console.error('Error parsing Google Sheets data:', error);
+        return [];
+    }
 }
 
 async function saveBooks() {
@@ -701,14 +799,8 @@ function findInsertionRowForUser(existingRows, userName) {
     
     // If user has existing entries, insert at second-to-last position (-2)
     if (userGroupStart >= 0 && userGroupEnd >= 0) {
-        const groupSize = userGroupEnd - userGroupStart + 1;
-        if (groupSize >= 2) {
-            // Insert at second-to-last position (between existing entries)
-            return userGroupEnd - 1;
-        } else {
-            // Only one entry, insert at the end of the group
-            return userGroupEnd + 1;
-        }
+        // Always insert at the end of the group for consistency
+        return userGroupEnd;
     }
     
     // If user doesn't exist yet, find where to insert alphabetically
@@ -810,40 +902,195 @@ async function addBook() {
         hideLoading();
     }
 }
+// Modal functions
+let currentModalBook = null;
+
+function showBookModal(title, author) {
+    currentModalBook = books.find(b => b.title === title && b.author === author);
+    if (!currentModalBook) return;
+
+    const modal = document.getElementById('bookDetailModal');
+    
+    // Event-Handler für Klicks außerhalb des Modals
+    const handleOutsideClick = (e) => {
+        if (e.target === modal) {
+            hideBookModal();
+        }
+    };
+    modal.addEventListener('click', handleOutsideClick);
+    
+    // Event-Handler entfernen wenn Modal geschlossen wird
+    modal.addEventListener('hide', () => {
+        modal.removeEventListener('click', handleOutsideClick);
+        currentModalBook = null;
+    }, { once: true });
+    
+    updateModalContent();
+    modal.classList.add('show');
+}
+
+function updateModalContent() {
+    if (!currentModalBook) return;
+    
+    const modal = document.getElementById('bookDetailModal');
+    const book = currentModalBook;
+    modal.innerHTML = `
+        <div class="md3-modal-content" style="max-width: 800px; padding: 32px; background: var(--md-sys-color-surface); border-radius: 28px; margin: 24px; box-shadow: 0 0 0 1px var(--md-sys-color-primary) inset, 0 0 20px 4px rgba(208, 188, 255, 0.15);">
+            <div class="md3-book-detail">
+                <div class="md3-book-detail-header">
+                    <h2 class="md3-book-detail-title" style="font-size: 2em; margin-bottom: 8px;">${escapeHtml(book.title)}</h2>
+                </div>
+                <div class="md3-book-detail-author" style="font-size: 1.2em; margin-bottom: 24px; font-weight: 500; color: var(--md-sys-color-on-surface-variant);">${escapeHtml(book.author)}</div>
+                
+                ${book.description ? `
+                    <div class="md3-book-detail-description" style="margin: 24px 0; font-size: 1.1em; text-align: justify; line-height: 1.5; white-space: pre-line;">
+                        ${escapeHtml(book.description)}
+                    </div>
+                ` : ''}
+                
+                <div class="md3-book-detail-tags" style="margin: 24px 0; display: flex; flex-wrap: wrap; gap: 8px;">
+                    ${book.year ? `
+                        <div class="md3-book-detail-chip" style="white-space: nowrap;">
+                            <span class="material-icons-round" style="font-size: 16px;">calendar_today</span>
+                            ${book.year}
+                        </div>
+                    ` : ''}
+                    
+                    ${book.pages ? `
+                        <div class="md3-book-detail-chip" style="white-space: nowrap;">
+                            <span class="material-icons-round" style="font-size: 16px;">menu_book</span>
+                            ${book.pages} Seiten
+                        </div>
+                    ` : ''}
+                    
+                    ${book.genres ? book.genres.split(/[,;]/).map(genre => genre.trim()).filter(genre => genre).map(genre => `
+                        <div class="md3-book-detail-chip" style="white-space: nowrap;">
+                            <span class="material-icons-round" style="font-size: 16px;">category</span>
+                            ${escapeHtml(genre)}
+                        </div>
+                    `).join('') : ''}
+                </div>
+                
+                <div class="md3-book-detail-footer">
+                    <div class="md3-book-detail-suggested-by">
+                        ${escapeHtml(book.suggestedBy)}
+                    </div>
+                    
+                    <div class="md3-book-detail-heart-section">
+                        <button 
+                            class="md3-heart-button-combined ${book.likes.some(like => like.user === currentUser) ? 'md3-heart-button-liked' : ''}"
+                            onclick="event.stopPropagation(); toggleLike('${escapeJsString(book.title)}', '${escapeJsString(book.author)}'); updateModalContent();"
+                        >
+                            <span class="md3-heart-icon">${book.likes.some(like => like.user === currentUser) ? '❤️' : '🤍'}</span>
+                            <span class="md3-heart-count">${book.likes.length}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+
+
+function hideBookModal() {
+    const modal = document.getElementById('bookDetailModal');
+    // Event auslösen, damit Event-Listener entfernt werden
+    modal.dispatchEvent(new Event('hide'));
+    modal.classList.remove('show');
+}
+
 async function toggleLike(title, author) {
     const book = books.find(b => b.title === title && b.author === author);
     if (!book) return;
-    
-    // Store likes locally since we can't write to Google Sheets easily
-    const likesKey = 'bookclub_likes';
-    const likes = JSON.parse(getCookie(likesKey) || '{}');
-    const bookKey = `${title}_${author}`;
-    
-    if (!likes[bookKey]) {
-        likes[bookKey] = [];
-    }
-    
-    const userLikeIndex = likes[bookKey].findIndex(like => like.user === currentUser);
-    
+
+    // Update UI immediately
+    const userLikeIndex = book.likes.findIndex(like => like.user === currentUser);
     if (userLikeIndex > -1) {
-        // Remove like
-        likes[bookKey].splice(userLikeIndex, 1);
+        book.likes.splice(userLikeIndex, 1);
     } else {
-        // Add like
-        likes[bookKey].push({
-            user: currentUser,
-            likedAt: new Date().toISOString()
-        });
+        book.likes.push({ user: currentUser });
     }
-    
-    // Update local storage
-    setCookie(likesKey, JSON.stringify(likes));
-    
-    // Update book's likes array for rendering
-    book.likes = likes[bookKey] || [];
     book.likeCount = book.likes.length;
-    
+
+    // Re-render immediately to show the change
     renderBooks();
+
+    // Update sheet in background without blocking
+    (async () => {
+    try {
+        // Find the row index of this book
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: getCookie('sheets_id'),
+            range: `${SHEETS_NAME}!A5:Z1000`,
+        });
+
+        const rows = response.result.values || [];
+        const rowIndex = rows.findIndex(row => 
+            row && row[2] === title && row[3] === author
+        );
+
+        if (rowIndex === -1) {
+            console.error('Book not found in sheet');
+            return;
+        }
+
+        // Get user columns mapping
+        const userResponse = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: getCookie('sheets_id'),
+            range: `${SHEETS_NAME}!I4:Z4`,
+        });
+
+        const userRow = userResponse.result.values?.[0] || [];
+        let userColIndex = -1;
+        // Find user column until empty cell or duplicate
+        const seenNames = new Set();
+        for (let i = 0; i < userRow.length; i++) {
+            const name = userRow[i] ? userRow[i].trim() : '';
+            if (!name || seenNames.has(name)) {
+                break; // Stop at first empty cell or duplicate
+            }
+            seenNames.add(name);
+            if (name === currentUser) {
+                userColIndex = 8 + i; // +8 to convert from 0-based array index to I column (column 9)
+                break;
+            }
+        };
+
+        if (userColIndex === -1) {
+            console.error('User column not found');
+            return;
+        }
+
+        // Read current value (ensure the row has enough columns)
+        const currentValue = rows[rowIndex].length > userColIndex ? rows[rowIndex][userColIndex] : '';
+        
+        // Toggle the like by setting/clearing the cell
+        const range = `${SHEETS_NAME}!${String.fromCharCode(65 + userColIndex)}${rowIndex + 5}`; // Convert column index to letter
+        await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: getCookie('sheets_id'),
+            range: range,
+            valueInputOption: 'RAW',
+            resource: {
+                values: [[currentValue ? '' : '1']] // Toggle between empty and 1
+            }
+        });
+
+    } catch (error) {
+        console.error('Error toggling like:', error);
+        showError('Fehler beim Aktualisieren der Favoriten');
+        
+        // Revert the local state if the server update failed
+        const userLikeIndex = book.likes.findIndex(like => like.user === currentUser);
+        if (userLikeIndex > -1) {
+            book.likes.splice(userLikeIndex, 1);
+        } else {
+            book.likes.push({ user: currentUser });
+        }
+        book.likeCount = book.likes.length;
+        renderBooks();
+    }
+    })();
 }
 
 // Edit functionality - disabled for Google Sheets
@@ -879,9 +1126,12 @@ function renderBooks() {
     updateTabsWithUsers();
     
     if (filteredBooks.length === 0) {
+        booksList.style.display = 'flex';
+        booksList.style.justifyContent = 'center';
         booksList.innerHTML = getEmptyStateHTML();
         return;
     }
+    booksList.style.display = 'grid'; // Reset to grid for normal book display
     
     // Sort books by like count (descending) and then by date (newest first)
     const sortedBooks = filteredBooks.sort((a, b) => {
@@ -898,33 +1148,42 @@ function renderBookCard(book) {
     const userHasLiked = book.likes.some(like => like.user === currentUser);
     const isMyBook = book.suggestedBy === currentUser;
     
-    // Build bottom tags HTML (Jahr, Genre, Seitenzahl)
+    // Build bottom tags HTML (Jahr, Seitenzahl, Genres)
     let tagsHTML = '';
     const tags = [];
     
+    // Jahr zuerst
     if (book.year) {
         tags.push(`<div class="md3-book-detail-chip"><span class="material-icons-round" style="font-size: 16px;">calendar_today</span>${book.year}</div>`);
     }
     
-    if (book.genres) {
-        tags.push(`<div class="md3-book-detail-chip"><span class="material-icons-round" style="font-size: 16px;">category</span>${escapeHtml(book.genres)}</div>`);
-    }
-    
+    // Dann Seitenzahl
     if (book.pages) {
         tags.push(`<div class="md3-book-detail-chip"><span class="material-icons-round" style="font-size: 16px;">menu_book</span>${book.pages} Seiten</div>`);
+    }
+    
+    // Dann die Genres
+    if (book.genres) {
+        // Split by comma or semicolon and trim each genre
+        const genreList = book.genres.split(/[,;]/).map(g => g.trim()).filter(g => g);
+        for (const genre of genreList) {
+            tags.push(`<div class="md3-book-detail-chip"><span class="material-icons-round" style="font-size: 16px;">category</span>${escapeHtml(genre)}</div>`);
+        }
     }
     
     if (tags.length > 0) {
         tagsHTML = `<div class="md3-book-card-tags">${tags.join('')}</div>`;
     }
+
+    const charLimit = 300;
     
     return `
-        <div class="md3-book-card">
+        <div class="md3-book-card" onclick="showBookModal('${escapeJsString(book.title)}', '${escapeJsString(book.author)}')">
             <div class="md3-book-card-content">
                 <h3 class="md3-book-card-title">${escapeHtml(book.title)}</h3>
                 <div class="md3-book-card-author">${escapeHtml(book.author)}</div>
                 
-                ${book.description ? `<div class="md3-book-card-description">${escapeHtml(book.description)}</div>` : ''}
+                ${book.description ? `<div class="md3-book-card-description">${escapeHtml(book.description.length > charLimit ? book.description.substring(0, charLimit-3) + '...' : book.description)}</div>` : ''}
                 
                 ${tagsHTML}
             </div>
@@ -937,8 +1196,7 @@ function renderBookCard(book) {
                 <div class="md3-book-card-heart-section">
                     <button 
                         class="md3-heart-button-combined ${userHasLiked ? 'md3-heart-button-liked' : ''}"
-                        onclick="toggleLike('${escapeHtml(book.title)}', '${escapeHtml(book.author)}')"
-                        ${isMyBook ? 'disabled title="Ja, schon klar, dass du deinen eigenen Vorschlag gut findest"' : ''}
+                        onclick="event.stopPropagation(); toggleLike('${escapeJsString(book.title)}', '${escapeJsString(book.author)}')"
                     >
                         <span class="md3-heart-icon">${userHasLiked ? '❤️' : '🤍'}</span>
                         <span class="md3-heart-count">${book.likes.length}</span>
@@ -968,14 +1226,14 @@ function getEmptyStateHTML() {
     switch (currentFilter) {
         case 'liked':
             return `
-                <div class="md3-empty-state">
+                <div class="md3-empty-state" style="text-align: center; max-width: 600px; padding: 48px 16px;">
                     <h3>Noch keine Favoriten</h3>
                     <p>Du hast noch keine Bücher geliket. Durchstöbere alle Bücher und like deine Favoriten!</p>
                 </div>
             `;
         case 'all':
             return `
-                <div class="md3-empty-state">
+                <div class="md3-empty-state" style="text-align: center; max-width: 600px; padding: 48px 16px;">
                     <h3>Noch keine Bücher</h3>
                     <p>Sei der erste, der ein Buch für den Buchclub vorschlägt!</p>
                 </div>
@@ -983,7 +1241,7 @@ function getEmptyStateHTML() {
         default:
             // User-specific filter
             return `
-                <div class="md3-empty-state">
+                <div class="md3-empty-state" style="text-align: center; max-width: 600px; padding: 48px 16px;">
                     <h3>Keine Vorschläge von ${escapeHtml(currentFilter)}</h3>
                     <p>${escapeHtml(currentFilter)} hat noch keine Bücher vorgeschlagen.</p>
                 </div>
@@ -1042,6 +1300,11 @@ function updateTabsWithUsers() {
 }
 
 // Utility functions
+function escapeJsString(text) {
+    if (!text) return '';
+    return text.replace(/[\\'"]/g, '\\$&');
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
