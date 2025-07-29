@@ -54,6 +54,7 @@ let currentUser = '';
 let books = [];
 let currentFilter = 'all';
 let editingBook = null; // Track which book is being edited
+let isAddingBook = false; // Prevent multiple simultaneous book additions
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
@@ -141,9 +142,6 @@ function setupEventListeners() {
         }
     });
     
-    // Add book
-    document.getElementById('addBookBtn').addEventListener('click', addBook);
-    
     // Clear form button
     document.getElementById('clearFormBtn').addEventListener('click', clearForm);
     
@@ -157,23 +155,6 @@ function setupEventListeners() {
     document.getElementById('saveEditBtn').addEventListener('click', saveEditedBook);
     document.getElementById('cancelEditBtn').addEventListener('click', hideEditModal);
     document.getElementById('deleteBookBtn').addEventListener('click', deleteBook);
-    
-    // Form submission on Enter (except textarea)
-    document.getElementById('bookTitle').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') addBook();
-    });
-    document.getElementById('bookAuthor').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') addBook();
-    });
-    document.getElementById('bookGenre').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') addBook();
-    });
-    document.getElementById('bookPages').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') addBook();
-    });
-    document.getElementById('bookYear').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') addBook();
-    });
     
     // Filter tabs - event listeners will be attached in updateTabsWithUsers()
     // No longer using filter tabs here as they're dynamically generated
@@ -693,8 +674,8 @@ async function appendBookToSheet(book) {
             '',                  // Funfacts (Column B) - leave empty for now
             book.title,          // Buchtitel (Column C)
             book.author,         // Autor (Column D)
-            book.year || '',     // Jahr (Column E)
-            book.pages || '',    // Seitenzahl (Column F)
+            book.year ? parseInt(book.year) : '',     // Jahr (Column E) - convert to number or empty
+            book.pages ? parseInt(book.pages) : '',   // Seitenzahl (Column F) - convert to number or empty
             book.genre || '',    // Genres (Column G)
             book.description || '' // Kurzbeschreibung (Column H)
         ]];
@@ -741,7 +722,7 @@ async function appendBookToSheet(book) {
         const updateResponse = await gapi.client.sheets.spreadsheets.values.update({
             spreadsheetId: spreadsheetId,
             range: insertRange,
-            valueInputOption: 'RAW',
+            valueInputOption: 'USER_ENTERED',
             resource: {
                 values: values
             }
@@ -833,6 +814,12 @@ function findInsertionRowForUser(existingRows, userName) {
 
 // Book management
 async function addBook() {
+    // Prevent multiple simultaneous executions
+    if (isAddingBook) {
+        return;
+    }
+    isAddingBook = true;
+    
     const title = document.getElementById('bookTitle').value.trim();
     const author = document.getElementById('bookAuthor').value.trim();
     const genre = document.getElementById('bookGenre').value.trim();
@@ -842,6 +829,7 @@ async function addBook() {
     
     if (!title || !author) {
         alert('Bitte gib sowohl Titel als auch Autor an.');
+        isAddingBook = false;
         return;
     }
     
@@ -853,6 +841,7 @@ async function addBook() {
     
     if (duplicate) {
         alert('Dieses Buch wurde bereits vorgeschlagen.');
+        isAddingBook = false;
         return;
     }
     
@@ -900,6 +889,7 @@ async function addBook() {
         }
     } finally {
         hideLoading();
+        isAddingBook = false;
     }
 }
 // Modal functions
