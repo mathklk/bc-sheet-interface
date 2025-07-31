@@ -254,7 +254,7 @@
             <!-- Add Book Section -->
             <section class="md3-card md3-add-book-card" id="addBookSection">
                 <div class="md3-card-content">
-                    <div class="md3-card-header">
+                    <div class="md3-card-header" id="addBookHeader" style="cursor: pointer;">
                         <div class="md3-card-header-content">
                             <span class="material-icons-round md3-card-icon">edit_note</span>
                             <div class="md3-card-header-text">
@@ -262,9 +262,13 @@
                                 <!-- <p class="md3-card-subhead">Teile deine Buchempfehlung mit der Gruppe</p> -->
                             </div>
                         </div>
+                        <button type="button" class="md3-icon-button" id="toggleFormBtn">
+                            <span class="material-icons-round" id="toggleFormIcon">expand_more</span>
+                        </button>
                     </div>
                     
-                    <form class="md3-add-book-form" id="addBookForm">
+                    <div class="md3-form-container" id="addBookFormContainer" style="display: none;">
+                        <form class="md3-add-book-form" id="addBookForm">
                         <div class="md3-form-row md3-form-row-primary">
                             <md-outlined-text-field 
                                 id="bookTitle" 
@@ -333,7 +337,8 @@
                                 <span>Vorschlag einreichen</span>
                             </button>
                         </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
             </section>
 
@@ -344,6 +349,25 @@
                         <h2 class="md3-section-headline">Buchvorschläge</h2>
                         
                         <div class="md3-section-actions">
+                            <div class="md3-voting-info" id="votingInfo" style="display: none;">
+                                <div class="md3-voting-counter">
+                                    <span class="material-icons-round">how_to_vote</span>
+                                    <span id="votingText">Stimmen: <span id="votesRemaining">3</span> verbleibend</span>
+                                </div>
+                                <div class="md3-ready-toggle" id="readyToggle" style="display: none;">
+                                    <label class="md3-switch">
+                                        <input type="checkbox" id="readyCheckbox" disabled>
+                                        <span class="md3-switch-track">
+                                            <span class="md3-switch-thumb"></span>
+                                        </span>
+                                        <span class="md3-switch-label">Bereit</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <button id="votingModeBtn" class="md3-button md3-button-outlined" title="Abstimmungsmodus">
+                                <span class="material-icons-round">how_to_vote</span>
+                                <span>Abstimmen</span>
+                            </button>
                             <button id="refreshBtn" class="md3-icon-button" title="Aktualisieren">
                                 <span class="material-icons-round">refresh</span>
                             </button>

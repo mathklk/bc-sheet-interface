@@ -1356,3 +1356,287 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   right: -8px;
   top: -8px;
 }
+
+/* Voting System Styles */
+.md3-voting-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.md3-voting-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.md3-vote-counter-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--md-sys-color-on-primary-container);
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 14px;
+  margin-left: 4px;
+  background: transparent;
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.md3-vote-counter-number.md3-vote-counter-filled {
+  background: var(--md-sys-color-on-primary-container);
+  color: var(--md-sys-color-primary-container);
+}
+
+.md3-vote-counter-number.md3-vote-counter-3.md3-vote-counter-filled {
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.md3-vote-counter-number.md3-vote-counter-2.md3-vote-counter-filled {
+  background: var(--md-sys-color-secondary);
+  border-color: var(--md-sys-color-secondary);
+  color: var(--md-sys-color-on-secondary);
+}
+
+.md3-vote-counter-number.md3-vote-counter-1.md3-vote-counter-filled {
+  background: var(--md-sys-color-tertiary);
+  border-color: var(--md-sys-color-tertiary);
+  color: var(--md-sys-color-on-tertiary);
+}
+
+.md3-ready-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.md3-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.md3-switch input[type="checkbox"] {
+  display: none;
+}
+
+.md3-switch-track {
+  position: relative;
+  width: 52px;
+  height: 32px;
+  background: var(--md-sys-color-surface-variant);
+  border-radius: 16px;
+  transition: background-color 0.2s ease;
+  border: 2px solid var(--md-sys-color-outline);
+}
+
+.md3-switch input:checked + .md3-switch-track {
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+}
+
+.md3-switch input:disabled + .md3-switch-track {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.md3-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  background: var(--md-sys-color-outline);
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.md3-switch input:checked + .md3-switch-track .md3-switch-thumb {
+  left: 22px;
+  background: var(--md-sys-color-on-primary);
+}
+
+.md3-switch-label {
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md3-switch input:disabled ~ .md3-switch-label {
+  opacity: 0.38;
+}
+
+/* Voting Buttons in Book Cards and Modal */
+.md3-voting-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.md3-vote-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--md-sys-color-outline);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.md3-vote-number.md3-vote-number-available:hover {
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.md3-vote-number.md3-vote-number-selected {
+  color: #000000;  /* Dark text for better contrast */
+  border-color: transparent;
+  font-weight: 700;  /* Make text bolder */
+}
+
+.md3-vote-number.md3-vote-number-selected.md3-vote-3 {
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+}
+
+.md3-vote-number.md3-vote-number-selected.md3-vote-2 {
+  background: var(--md-sys-color-secondary);
+  border-color: var(--md-sys-color-secondary);
+}
+
+.md3-vote-number.md3-vote-number-selected.md3-vote-1 {
+  background: var(--md-sys-color-tertiary);
+  border-color: var(--md-sys-color-tertiary);
+}
+
+/* Book Card Footer */
+.md3-book-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.md3-book-detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+/* Book Card Voting Mode */
+.md3-book-card.md3-book-card-voting {
+  cursor: default;
+}
+
+.md3-book-card.md3-book-card-voting .md3-book-card-content {
+  pointer-events: auto;
+}
+
+.md3-book-card-main {
+  cursor: pointer;
+}
+
+.md3-book-card.md3-book-card-voting .md3-book-card-main:hover {
+  background: var(--md-sys-color-surface-container);
+  border-radius: 8px;
+  margin: -8px;
+  padding: 8px;
+}
+
+/* Form Collapse Styles */
+.md3-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.md3-card-header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.md3-form-container {
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+#toggleFormBtn {
+  transition: transform 0.3s ease;
+}
+
+#toggleFormBtn.rotated .material-icons-round {
+  transform: rotate(180deg);
+}
+
+/* Responsive adjustments for voting */
+@media (max-width: 768px) {
+  .md3-voting-info {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .md3-voting-counter {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
+  
+  .md3-vote-counter-number {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+  
+  .md3-voting-buttons {
+    gap: 6px;
+  }
+  
+  .md3-vote-number {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+  
+  .md3-book-card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .md3-book-card-footer .md3-voting-buttons {
+    align-self: flex-end;
+  }
+  
+  .md3-section-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .md3-section-header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}

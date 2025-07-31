@@ -56,6 +56,15 @@ let currentFilter = 'all';
 let editingBook = null; // Track which book is being edited
 let isAddingBook = false; // Prevent multiple simultaneous book additions
 
+// Voting state
+let userVotes = {}; // Only store current user's votes: { points: bookId, ... }
+let isVotingMode = false; // Toggle between normal and voting mode
+let votingPhase = false; // Whether voting is currently active
+let isFormCollapsed = true; // Form is collapsed by default
+let readyCheckInterval = null; // Interval for checking if all users are ready
+let isVoteCompleted = false; // Whether voting has been completed
+let votingResults = null; // Store the voting results
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', function() {
     handleInviteRoute();
@@ -114,6 +123,14 @@ function initializeApp() {
         SHEETS_URL = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/edit`;
     }
     
+    // Initialize form as collapsed
+    const addBookFormContainer = document.getElementById('addBookFormContainer');
+    const toggleFormIcon = document.getElementById('toggleFormIcon');
+    if (addBookFormContainer && toggleFormIcon) {
+        addBookFormContainer.style.display = 'none';
+        toggleFormIcon.textContent = 'expand_more';
+    }
+    
     // Initialize Google API is handled in handleInviteRoute
     // The rest of the initialization will be called from onAuthSuccess
     
@@ -169,6 +186,43 @@ function setupEventListeners() {
             loadBooks();
             showSuccess('Vorschläge werden geladen...');
         });
+    }
+    
+    // Form collapse/expand functionality
+    const addBookHeader = document.getElementById('addBookHeader');
+    const toggleFormBtn = document.getElementById('toggleFormBtn');
+    const toggleFormIcon = document.getElementById('toggleFormIcon');
+    const addBookFormContainer = document.getElementById('addBookFormContainer');
+    
+    if (addBookHeader && toggleFormBtn) {
+        const toggleForm = () => {
+            isFormCollapsed = !isFormCollapsed;
+            if (isFormCollapsed) {
+                addBookFormContainer.style.display = 'none';
+                toggleFormIcon.textContent = 'expand_more';
+            } else {
+                addBookFormContainer.style.display = 'block';
+                toggleFormIcon.textContent = 'expand_less';
+            }
+        };
+        
+        addBookHeader.addEventListener('click', toggleForm);
+        toggleFormBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleForm();
+        });
+    }
+    
+    // Voting mode functionality
+    const votingModeBtn = document.getElementById('votingModeBtn');
+    if (votingModeBtn) {
+        votingModeBtn.addEventListener('click', toggleVotingMode);
+    }
+    
+    // Ready checkbox functionality
+    const readyCheckbox = document.getElementById('readyCheckbox');
+    if (readyCheckbox) {
+        readyCheckbox.addEventListener('change', handleReadyToggle);
     }
 }
 
@@ -242,7 +296,7 @@ async function loadAvailableNames() {
         
         // Fetch data from Google Sheets to get available names using OAuth2
         const range = `${SHEETS_NAME}!I4:Z4`; // Names are stored in row 4, starting from column I
-        
+
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: SHEETS_ID,
             range: range,
@@ -255,7 +309,7 @@ async function loadAvailableNames() {
         const seenNames = new Set();
         
         for (const name of nameRow) {
-            if (!name || !name.trim() || seenNames.has(name.trim())) {
+            if (!name || !name.trim() || seenNames.has(name.trim()) || name.trim() === "Ergebnis") {
                 break; // Stop at first empty cell or duplicate
             }
             seenNames.add(name.trim());
@@ -301,7 +355,7 @@ async function loadAvailableNames() {
                 if (books.length === 0) {
                     loadBooks();
                 } else {
-                    renderBooks(); // Re-render to update "my suggestions" filter and show vote buttons
+                    renderBooks(); // Re-render to update filters
                 }
             });
             
@@ -402,6 +456,11 @@ function updateUIForUserMode() {
     addBookSection.style.display = 'block';
     
     document.getElementById('currentUser').textContent = currentUser;
+    
+    // Reset voting state for new user
+    userVotes = {};
+    isVotingMode = false;
+    updateVotingModeUI();
 }
 
 function logout() {
@@ -529,7 +588,7 @@ async function loadBooks() {
         
         // Use Google Sheets API v4 with OAuth2
         const spreadsheetId = SHEETS_ID;
-        const range = `${SHEETS_NAME}!A5:Z1000`; // Include all columns up to Z for likes
+        const range = `${SHEETS_NAME}!A5:H1000`; // Only need columns A-H for book data
         
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: spreadsheetId,
@@ -537,6 +596,10 @@ async function loadBooks() {
         });
         
         books = await parseGoogleSheetsData(response.result.values || []);
+        
+        // Check if voting is completed
+        await checkVotingCompletedState();
+        
         renderBooks();
         
     } catch (error) {
@@ -560,6 +623,62 @@ async function loadBooks() {
     }
 }
 
+async function checkVotingCompletedState() {
+    try {
+        const SHEETS_ID = getCookie('sheets_id');
+        
+        // Get users and their ready status
+        const usersRange = `${SHEETS_NAME}!I3:Z4`; // Row 3 for ready status, row 4 for names
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SHEETS_ID,
+            range: usersRange,
+        });
+        
+        const data = response.result.values || [];
+        const readyRow = data[0] || [];
+        const nameRow = data[1] || [];
+        
+        // Check if all users are finished (vote completed state)
+        let allFinished = true;
+        let hasUsers = false;
+        
+        for (let i = 0; i < nameRow.length; i++) {
+            if (nameRow[i] && nameRow[i].trim() && nameRow[i].trim() !== "Ergebnis") {
+                hasUsers = true;
+                const status = readyRow[i] ? readyRow[i].trim() : '';
+                if (status !== 'fertig') {
+                    allFinished = false;
+                    break;
+                }
+            } else if (nameRow[i] && nameRow[i].trim() === "Ergebnis") {
+                break; // Stop at Ergebnis column
+            }
+        }
+        
+        // If all users are finished, we're in completed state
+        if (allFinished && hasUsers) {
+            isVoteCompleted = true;
+            isVotingMode = false;
+            
+            // Load results if not already loaded
+            if (!votingResults) {
+                const results = await calculateFinalResults();
+                votingResults = results;
+            }
+        } else {
+            isVoteCompleted = false;
+            votingResults = null;
+        }
+        
+        // Update UI to reflect current state
+        updateVotingModeUI();
+        
+    } catch (error) {
+        console.error('Error checking voting completed state:', error);
+        // Don't throw error, just continue with normal loading
+    }
+}
+
 function extractSpreadsheetId(url) {
     const regex = /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/;
     const match = url.match(regex);
@@ -568,27 +687,6 @@ function extractSpreadsheetId(url) {
 
 async function parseGoogleSheetsData(rows) {
     const books = [];
-    
-    try {
-    const range = `${SHEETS_NAME}!I4:Z4`;
-    const userRow = await gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: getCookie('sheets_id'),
-        range: range,
-    }).then(response => response.result.values?.[0] || []);
-
-    // Create map of username to column index
-    const userColumnMap = {};
-    const seenNames = new Set();
-    
-    // Process names until we find a duplicate or empty cell
-    for (let i = 0; i < userRow.length; i++) {
-        const name = userRow[i] ? userRow[i].trim() : '';
-        if (!name || seenNames.has(name)) {
-            break; // Stop at first empty cell or duplicate
-        }
-        seenNames.add(name);
-        userColumnMap[name] = i; // Store array index (0 = column I)
-    }
     
     for (const row of rows) {
         // Skip empty rows
@@ -602,35 +700,13 @@ async function parseGoogleSheetsData(rows) {
             pages: row[5] ? parseInt(row[5]) : null, // Seitenzahl
             description: row[7] || '',      // Kurzbeschreibung
             genres: row[6] || '',          // Genres
-            suggestedBy: row[0] || 'Unbekannt', // SuggestedBy
-            suggestedAt: new Date().toISOString(), // We don't have this data from sheets
-            likes: []  // Will be populated from local storage
+            suggestedBy: row[0] || 'Unbekannt' // SuggestedBy
         };
         
-        // Load likes from local storage
-        const bookKey = `${book.title}_${book.author}`;
-        // Get likes from the sheet - check each user's column for this row
-        book.likes = [];
-        // Check each user's column (starting from column I = index 8)
-        Object.entries(userColumnMap).forEach(([username, relativeIndex]) => {
-            const columnIndex = 8 + relativeIndex; // Column I starts at index 8
-            // Make sure the row has enough columns and the cell has content
-            if (row.length > columnIndex && row[columnIndex] && row[columnIndex].trim()) {
-                book.likes.push({
-                    user: username
-                });
-            }
-        });
-        
-        book.likeCount = book.likes.length;
         books.push(book);
     }
     
     return books;
-    } catch (error) {
-        console.error('Error parsing Google Sheets data:', error);
-        return [];
-    }
 }
 
 async function saveBooks() {
@@ -924,6 +1000,35 @@ function updateModalContent() {
     
     const modal = document.getElementById('bookDetailModal');
     const book = currentModalBook;
+    const bookId = `${book.title}|${book.author}`;
+    const hasVoted = userVotes[bookId];
+    const votedPoints = hasVoted ? userVotes[bookId] : null;
+    
+    // Build voting buttons for modal - only show if voting is active and not completed
+    let votingHTML = '';
+    if (isVotingMode && !isVoteCompleted) {
+        const usedPoints = Object.values(userVotes);
+        const allPoints = [3, 2, 1];
+        
+        const buttonHTML = allPoints.map(points => {
+            const isVotedForThisBook = hasVoted && votedPoints === points;
+            
+            if (isVotedForThisBook) {
+                // This book has this vote - clicking will remove it
+                return `<button class="md3-vote-number md3-vote-number-selected md3-vote-${points}" onclick="castVote('${escapeJsString(book.title)}', '${escapeJsString(book.author)}', ${points})">${points}</button>`;
+            } else {
+                // Available to vote - clicking will either add vote or replace existing vote
+                return `<button class="md3-vote-number md3-vote-number-available md3-vote-${points}" onclick="castVote('${escapeJsString(book.title)}', '${escapeJsString(book.author)}', ${points})">${points}</button>`;
+            }
+        }).join('');
+        
+        votingHTML = `
+            <div class="md3-voting-buttons">
+                ${buttonHTML}
+            </div>
+        `;
+    }
+    
     modal.innerHTML = `
         <div class="md3-modal-content" style="max-width: 800px; padding: 32px; background: var(--md-sys-color-surface); border-radius: 28px; margin: 24px; box-shadow: 0 0 0 1px var(--md-sys-color-primary) inset, 0 0 20px 4px rgba(208, 188, 255, 0.15);">
             <div class="md3-book-detail">
@@ -965,16 +1070,7 @@ function updateModalContent() {
                     <div class="md3-book-detail-suggested-by">
                         ${escapeHtml(book.suggestedBy)}
                     </div>
-                    
-                    <div class="md3-book-detail-heart-section">
-                        <button 
-                            class="md3-heart-button-combined ${book.likes.some(like => like.user === currentUser) ? 'md3-heart-button-liked' : ''}"
-                            onclick="event.stopPropagation(); toggleLike('${escapeJsString(book.title)}', '${escapeJsString(book.author)}'); updateModalContent();"
-                        >
-                            <span class="md3-heart-icon">${book.likes.some(like => like.user === currentUser) ? '❤️' : '🤍'}</span>
-                            <span class="md3-heart-count">${book.likes.length}</span>
-                        </button>
-                    </div>
+                    ${votingHTML}
                 </div>
             </div>
         </div>
@@ -988,99 +1084,6 @@ function hideBookModal() {
     // Event auslösen, damit Event-Listener entfernt werden
     modal.dispatchEvent(new Event('hide'));
     modal.classList.remove('show');
-}
-
-async function toggleLike(title, author) {
-    const book = books.find(b => b.title === title && b.author === author);
-    if (!book) return;
-
-    // Update UI immediately
-    const userLikeIndex = book.likes.findIndex(like => like.user === currentUser);
-    if (userLikeIndex > -1) {
-        book.likes.splice(userLikeIndex, 1);
-    } else {
-        book.likes.push({ user: currentUser });
-    }
-    book.likeCount = book.likes.length;
-
-    // Re-render immediately to show the change
-    renderBooks();
-
-    // Update sheet in background without blocking
-    (async () => {
-    try {
-        // Find the row index of this book
-        const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: getCookie('sheets_id'),
-            range: `${SHEETS_NAME}!A5:Z1000`,
-        });
-
-        const rows = response.result.values || [];
-        const rowIndex = rows.findIndex(row => 
-            row && row[2] === title && row[3] === author
-        );
-
-        if (rowIndex === -1) {
-            console.error('Book not found in sheet');
-            return;
-        }
-
-        // Get user columns mapping
-        const userResponse = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: getCookie('sheets_id'),
-            range: `${SHEETS_NAME}!I4:Z4`,
-        });
-
-        const userRow = userResponse.result.values?.[0] || [];
-        let userColIndex = -1;
-        // Find user column until empty cell or duplicate
-        const seenNames = new Set();
-        for (let i = 0; i < userRow.length; i++) {
-            const name = userRow[i] ? userRow[i].trim() : '';
-            if (!name || seenNames.has(name)) {
-                break; // Stop at first empty cell or duplicate
-            }
-            seenNames.add(name);
-            if (name === currentUser) {
-                userColIndex = 8 + i; // +8 to convert from 0-based array index to I column (column 9)
-                break;
-            }
-        };
-
-        if (userColIndex === -1) {
-            console.error('User column not found');
-            return;
-        }
-
-        // Read current value (ensure the row has enough columns)
-        const currentValue = rows[rowIndex].length > userColIndex ? rows[rowIndex][userColIndex] : '';
-        
-        // Toggle the like by setting/clearing the cell
-        const range = `${SHEETS_NAME}!${String.fromCharCode(65 + userColIndex)}${rowIndex + 5}`; // Convert column index to letter
-        await gapi.client.sheets.spreadsheets.values.update({
-            spreadsheetId: getCookie('sheets_id'),
-            range: range,
-            valueInputOption: 'RAW',
-            resource: {
-                values: [[currentValue ? '' : '1']] // Toggle between empty and 1
-            }
-        });
-
-    } catch (error) {
-        console.error('Error toggling like:', error);
-        showError('Fehler beim Aktualisieren der Favoriten');
-        
-        // Revert the local state if the server update failed
-        const userLikeIndex = book.likes.findIndex(like => like.user === currentUser);
-        if (userLikeIndex > -1) {
-            book.likes.splice(userLikeIndex, 1);
-        } else {
-            book.likes.push({ user: currentUser });
-        }
-        book.likeCount = book.likes.length;
-        renderBooks();
-    }
-    })();
 }
 
 // Edit functionality - disabled for Google Sheets
@@ -1107,6 +1110,584 @@ async function deleteBook() {
     return false;
 }
 
+// Voting functionality
+function toggleVotingMode() {
+    // Check if voting is completed first
+    if (isVoteCompleted) {
+        showVotingResults();
+        return;
+    }
+    
+    isVotingMode = !isVotingMode;
+    updateVotingModeUI();
+    renderBooks(); // Re-render books to show/hide voting buttons
+}
+
+function updateVotingModeUI() {
+    const votingModeBtn = document.getElementById('votingModeBtn');
+    const votingInfo = document.getElementById('votingInfo');
+    const addBookSection = document.getElementById('addBookSection');
+    
+    // Check if voting is completed
+    if (isVoteCompleted) {
+        votingModeBtn.classList.remove('md3-button-filled');
+        votingModeBtn.classList.add('md3-button-outlined');
+        votingModeBtn.innerHTML = '<span class="material-icons-round">poll</span><span>Ergebnisse anzeigen</span>';
+        votingInfo.style.display = 'none';
+        addBookSection.style.display = 'block';
+        return;
+    }
+    
+    if (isVotingMode) {
+        votingModeBtn.classList.add('md3-button-filled');
+        votingModeBtn.classList.remove('md3-button-outlined');
+        votingModeBtn.innerHTML = '<span class="material-icons-round">close</span><span>Abstimmen beenden</span>';
+        votingInfo.style.display = 'flex';
+        addBookSection.style.display = 'none'; // Hide form during voting
+        updateVotingCounter();
+    } else {
+        votingModeBtn.classList.remove('md3-button-filled');
+        votingModeBtn.classList.add('md3-button-outlined');
+        votingModeBtn.innerHTML = '<span class="material-icons-round">how_to_vote</span><span>Abstimmen</span>';
+        votingInfo.style.display = 'none';
+        addBookSection.style.display = 'block'; // Show form when not voting
+        
+        // Reset ready toggle when exiting voting mode
+        const readyToggle = document.getElementById('readyToggle');
+        const readyCheckbox = document.getElementById('readyCheckbox');
+        readyToggle.style.display = 'none';
+        readyCheckbox.checked = false;
+        
+        // Stop ready state monitoring when exiting voting mode
+        stopReadyStateMonitoring();
+    }
+    
+    // Re-render books to update voting buttons visibility
+    renderBooks();
+}
+
+function updateVotingCounter() {
+    const votesUsed = Object.keys(userVotes).length;
+    const votesRemaining = 3 - votesUsed;
+    const votingText = document.getElementById('votingText');
+    const readyToggle = document.getElementById('readyToggle');
+    const readyCheckbox = document.getElementById('readyCheckbox');
+    
+    // Update voting counter to show the three numbers with filled states
+    const usedPoints = Object.values(userVotes);
+    const counterHTML = [3, 2, 1].map(points => {
+        const isUsed = usedPoints.includes(points);
+        return `<div class="md3-vote-counter-number ${isUsed ? 'md3-vote-counter-filled' : ''} md3-vote-counter-${points}">${points}</div>`;
+    }).join('');
+    
+    if (votingText) {
+        votingText.innerHTML = `Stimmen: ${counterHTML}`;
+    }
+    
+    // Always show ready toggle when in voting mode, but enable only when all votes are cast
+    if (isVotingMode) {
+        readyToggle.style.display = 'flex';
+        if (votesRemaining === 0) {
+            readyCheckbox.disabled = false;
+        } else {
+            readyCheckbox.disabled = true;
+            readyCheckbox.checked = false;
+        }
+    } else {
+        readyToggle.style.display = 'none';
+    }
+}
+
+function castVote(bookTitle, bookAuthor, points) {
+    const bookId = `${bookTitle}|${bookAuthor}`;
+    
+    // If user already voted this exact vote for this book, remove it
+    if (userVotes[bookId] === points) {
+        delete userVotes[bookId];
+        updateVotingCounter();
+        renderBooks();
+        
+        // Update modal if it's open for this book
+        if (currentModalBook && currentModalBook.title === bookTitle && currentModalBook.author === bookAuthor) {
+            updateModalContent();
+        }
+        
+        // No popup message when removing votes
+        return;
+    }
+    
+    // Check if this point value is used for another book and remove it
+    const bookWithThisPoints = Object.keys(userVotes).find(id => userVotes[id] === points);
+    if (bookWithThisPoints) {
+        delete userVotes[bookWithThisPoints];
+    }
+    
+    // If user already voted for this book with different points, remove the old vote
+    if (userVotes[bookId]) {
+        delete userVotes[bookId];
+    }
+    
+    // Cast the new vote
+    userVotes[bookId] = points;
+    updateVotingCounter();
+    renderBooks(); // Re-render to update button states
+    
+    // Update modal if it's open for this book
+    if (currentModalBook && currentModalBook.title === bookTitle && currentModalBook.author === bookAuthor) {
+        updateModalContent();
+    }
+}
+
+async function handleReadyToggle() {
+    const readyCheckbox = document.getElementById('readyCheckbox');
+    const isReady = readyCheckbox.checked;
+    
+    try {
+        await updateReadyStatus(isReady);
+        
+        // Start/stop periodic checking based on ready state
+        if (isReady) {
+            startReadyStateMonitoring();
+        } else {
+            stopReadyStateMonitoring();
+        }
+    } catch (error) {
+        console.error('Error updating ready status:', error);
+        showError('Fehler beim Aktualisieren der Bereitschaft: ' + error.message);
+        // Revert checkbox state
+        readyCheckbox.checked = !isReady;
+    }
+}
+
+async function updateReadyStatus(isReady) {
+    const SHEETS_ID = getCookie('sheets_id');
+    if (!SHEETS_ID || !SHEETS_NAME || !CLIENT_ID) {
+        throw new Error('Google Sheets Konfiguration fehlt');
+    }
+    
+    if (!gapi.client.getToken()) {
+        throw new Error('Nicht authentifiziert');
+    }
+    
+    // First, get the list of all users to find the correct column
+    const usersRange = `${SHEETS_NAME}!I4:Z4`; // Names are in row 4
+    const usersResponse = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SHEETS_ID,
+        range: usersRange,
+    });
+    
+    const userRow = usersResponse.result.values?.[0] || [];
+    let userColumnIndex = -1;
+    
+    // Find current user's column (starting from column I = index 0)
+    for (let i = 0; i < userRow.length; i++) {
+        if (userRow[i] && userRow[i].trim() === currentUser) {
+            userColumnIndex = i;
+            break;
+        }
+    }
+    
+    if (userColumnIndex === -1) {
+        throw new Error('User nicht in der Tabelle gefunden');
+    }
+    
+    // Convert index to column letter (I=0, J=1, K=2, etc.)
+    const columnLetter = String.fromCharCode(73 + userColumnIndex); // 73 = 'I'
+    const readyCell = `${SHEETS_NAME}!${columnLetter}3`;
+    
+    // Update the ready status (only "bereit" or empty, not "fertig" yet)
+    await gapi.client.sheets.spreadsheets.values.update({
+        spreadsheetId: SHEETS_ID,
+        range: readyCell,
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+            values: [[isReady ? 'bereit' : '']]
+        }
+    });
+    
+    // Check if all users are ready and process votes
+    await checkAllUsersReady();
+}
+
+function startReadyStateMonitoring() {
+    // Clear any existing interval
+    stopReadyStateMonitoring();
+    
+    // Start checking every 1 second
+    readyCheckInterval = setInterval(async () => {
+        try {
+            await checkAllUsersReady();
+        } catch (error) {
+            console.error('Error during periodic ready check:', error);
+        }
+    }, 1000);
+}
+
+function stopReadyStateMonitoring() {
+    if (readyCheckInterval) {
+        clearInterval(readyCheckInterval);
+        readyCheckInterval = null;
+    }
+}
+
+async function writeUserVotes(userColumnIndex) {
+    const SHEETS_ID = getCookie('sheets_id');
+    const columnLetter = String.fromCharCode(73 + userColumnIndex); // 73 = 'I'
+    
+    // Get all books from the sheet to match with votes
+    const booksRange = `${SHEETS_NAME}!A5:H1000`;
+    const booksResponse = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SHEETS_ID,
+        range: booksRange,
+    });
+    
+    const rows = booksResponse.result.values || [];
+    const updates = [];
+    
+    // Find each voted book and prepare the update
+    for (const [bookId, points] of Object.entries(userVotes)) {
+        const [title, author] = bookId.split('|');
+        
+        // Find the row for this book
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (row && row[2] === title && row[3] === author) {
+                const rowNumber = i + 5; // Adjust for header rows
+                const voteCell = `${SHEETS_NAME}!${columnLetter}${rowNumber}`;
+                updates.push({
+                    range: voteCell,
+                    values: [[points]]
+                });
+                break;
+            }
+        }
+    }
+    
+    // Batch update all votes
+    if (updates.length > 0) {
+        await gapi.client.sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: SHEETS_ID,
+            resource: {
+                valueInputOption: 'USER_ENTERED',
+                data: updates
+            }
+        });
+    }
+}
+
+async function checkAllUsersReady() {
+    const SHEETS_ID = getCookie('sheets_id');
+    
+    // Get users and their ready status
+    const usersRange = `${SHEETS_NAME}!I3:Z4`; // Row 3 for ready status, row 4 for names
+    const response = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SHEETS_ID,
+        range: usersRange,
+    });
+    
+    const data = response.result.values || [];
+    const readyRow = data[0] || [];
+    const nameRow = data[1] || [];
+    
+    // Check different states: all ready ("bereit"), all finished ("fertig")
+    let allReady = true;
+    let allFinished = true;
+    const activeUsers = [];
+    let myColumnIndex = -1;
+    
+    for (let i = 0; i < nameRow.length; i++) {
+        if (nameRow[i] && nameRow[i].trim() && nameRow[i].trim() !== "Ergebnis") {
+            activeUsers.push(nameRow[i].trim());
+            
+            // Track current user's column
+            if (nameRow[i].trim() === currentUser) {
+                myColumnIndex = i;
+            }
+            
+            const status = readyRow[i] ? readyRow[i].trim() : '';
+            
+            if (status !== 'bereit' && status !== 'fertig') {
+                allReady = false;
+                allFinished = false;
+            } else if (status === 'bereit') {
+                allFinished = false;
+            }
+        } else {
+            break; // Stop at first empty name
+        }
+    }
+    
+    if (allFinished && activeUsers.length > 0) {
+        // All users are finished - show results
+        isVoteCompleted = true;
+        isVotingMode = false;
+        stopReadyStateMonitoring();
+        
+        // Update UI to reflect completed state and hide voting buttons immediately
+        updateVotingModeUI();
+        renderBooks(); // Re-render books to hide voting buttons before showing modal
+        
+        // Calculate and show results
+        await calculateAndShowResults();
+        
+    } else if (allReady && activeUsers.length > 0 && myColumnIndex >= 0) {
+        // All users are ready - now write votes and change to "fertig"
+        const myStatus = readyRow[myColumnIndex] ? readyRow[myColumnIndex].trim() : '';
+        
+        if (myStatus === 'bereit') {
+            // Change own status to "fertig" and write votes
+            await markAsFinishedAndWriteVotes(myColumnIndex);
+        }
+    }
+}
+
+async function markAsFinishedAndWriteVotes(userColumnIndex) {
+    const SHEETS_ID = getCookie('sheets_id');
+    const columnLetter = String.fromCharCode(73 + userColumnIndex); // 73 = 'I'
+    const readyCell = `${SHEETS_NAME}!${columnLetter}3`;
+    
+    try {
+        // First, write the votes if user has all 3 votes
+        if (Object.keys(userVotes).length === 3) {
+            await writeUserVotes(userColumnIndex);
+        }
+        
+        // Then change status to "fertig"
+        await gapi.client.sheets.spreadsheets.values.update({
+            spreadsheetId: SHEETS_ID,
+            range: readyCell,
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+                values: [['fertig']]
+            }
+        });
+        
+        console.log('Marked as finished and wrote votes');
+        
+    } catch (error) {
+        console.error('Error marking as finished:', error);
+        throw error;
+    }
+}
+
+async function finalizeVoting() {
+    // This function is called when all users are ready
+    // Calculate final results and write them to the sheet
+    await calculateFinalResults();
+    console.log('Voting finalized - all users ready');
+}
+
+async function calculateFinalResults() {
+    const SHEETS_ID = getCookie('sheets_id');
+    
+    // Get all voting data including user names
+    const votingRange = `${SHEETS_NAME}!A5:Z1000`; // Get all data including votes
+    const usersRange = `${SHEETS_NAME}!I4:Z4`; // Get user names
+    
+    const [votingResponse, usersResponse] = await Promise.all([
+        gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SHEETS_ID,
+            range: votingRange,
+        }),
+        gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SHEETS_ID,
+            range: usersRange,
+        })
+    ]);
+    
+    const rows = votingResponse.result.values || [];
+    const userNames = usersResponse.result.values?.[0] || [];
+    const results = {};
+    
+    // Calculate total points for each book and track votes
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || !row[2] || !row[3]) continue; // Skip if no title or author
+        
+        const bookId = `${row[2]}|${row[3]}`; // title|author
+        if (!results[bookId]) {
+            results[bookId] = {
+                title: row[2],
+                author: row[3],
+                suggestedBy: row[0] || 'Unbekannt',
+                totalPoints: 0,
+                votes: [],
+                voterDetails: []
+            };
+        }
+        
+        // Check columns I onwards for votes, but only for actual user columns
+        for (let j = 8; j < row.length; j++) {
+            const userIndex = j - 8; // Convert back to user index
+            const userName = userNames[userIndex];
+            
+            // Only process if this column has a valid user name (not empty or "Ergebnis")
+            if (!userName || !userName.trim() || userName.trim() === "Ergebnis") {
+                continue; // Skip this column as it's not a user column
+            }
+            
+            const points = parseInt(row[j]);
+            if (!isNaN(points) && points > 0) {
+                results[bookId].totalPoints += points;
+                results[bookId].votes.push(points);
+                
+                // Add voter details with initial and points
+                const initial = userName.trim().charAt(0).toUpperCase();
+                results[bookId].voterDetails.push({ initial, points });
+            }
+        }
+    }
+    
+    return results;
+}
+
+async function calculateAndShowResults() {
+    try {
+        const results = await calculateFinalResults();
+        votingResults = results;
+        showVotingResults();
+    } catch (error) {
+        console.error('Error calculating results:', error);
+        showError('Fehler beim Berechnen der Ergebnisse: ' + error.message);
+    }
+}
+
+function showVotingResults() {
+    if (!votingResults) return;
+    
+    // Convert results to array and sort by total points
+    const sortedResults = Object.values(votingResults)
+        .filter(result => result.totalPoints > 0)
+        .sort((a, b) => b.totalPoints - a.totalPoints);
+    
+    if (sortedResults.length === 0) {
+        showError('Keine Abstimmungsergebnisse gefunden.');
+        return;
+    }
+    
+    // Find the winner(s) and their suggestedBy
+    const highestPoints = sortedResults[0].totalPoints;
+    const winners = sortedResults.filter(result => result.totalPoints === highestPoints);
+    const winnerSuggestedBy = winners[0].suggestedBy;
+    
+    // Get all books from the same person who suggested the winning book(s)
+    const allBooksFromWinner = Object.values(votingResults)
+        .filter(result => result.suggestedBy === winnerSuggestedBy)
+        .sort((a, b) => b.totalPoints - a.totalPoints);
+    
+    const modal = document.getElementById('bookDetailModal');
+    
+    // Event-Handler für Klicks außerhalb des Modals
+    const handleOutsideClick = (e) => {
+        if (e.target === modal) {
+            hideBookModal();
+        }
+    };
+    modal.addEventListener('click', handleOutsideClick);
+    
+    // Event-Handler entfernen wenn Modal geschlossen wird
+    modal.addEventListener('hide', () => {
+        modal.removeEventListener('click', handleOutsideClick);
+    }, { once: true });
+    
+    let resultsHTML = '';
+    let currentRank = 1;
+    let previousPoints = -1;
+    
+    allBooksFromWinner.forEach((result, index) => {
+        // Determine if this is a winner (tied for first place)
+        const isWinner = result.totalPoints === highestPoints;
+        
+        // Update rank only if points are different from previous
+        if (result.totalPoints !== previousPoints) {
+            currentRank = index + 1;
+        }
+        previousPoints = result.totalPoints;
+        
+        const rankClass = isWinner ? 'winner' : '';
+        const rankIcon = isWinner ? '👑' : `${currentRank}.`;
+        
+        resultsHTML += `
+            <div class="result-item ${rankClass}" style="
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                padding: 16px; 
+                margin: 8px 0; 
+                border-radius: 12px;
+                background: ${isWinner ? 'var(--md-sys-color-primary-container)' : 'var(--md-sys-color-surface-variant)'};
+                border: ${isWinner ? '2px solid var(--md-sys-color-primary)' : '1px solid var(--md-sys-color-outline-variant)'};
+                gap: 24px;
+            ">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                    <span style="font-size: 1.5em; min-width: 40px;">${rankIcon}</span>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: ${isWinner ? '700' : '500'}; font-size: ${isWinner ? '1.2em' : '1em'}; line-height: 1.2;">
+                            ${escapeHtml(result.title)}
+                        </div>
+                        <div style="color: var(--md-sys-color-on-surface-variant); font-size: 0.9em;">
+                            von ${escapeHtml(result.author)}
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right; flex-shrink: 0;">
+                    <div style="font-weight: 700; font-size: 1.3em; color: var(--md-sys-color-primary);">
+                        ${result.totalPoints} Punkte
+                    </div>
+                    <div style="font-size: 0.8em; color: var(--md-sys-color-on-surface-variant);">
+                        ${result.voterDetails.map(voter => `${voter.initial}${voter.points}`).join(', ')}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    modal.innerHTML = `
+        <div class="md3-modal-content" style="max-width: 1000px; padding: 32px; background: var(--md-sys-color-surface); border-radius: 28px; margin: 24px; box-shadow: 0 0 0 1px var(--md-sys-color-primary) inset, 0 0 20px 4px rgba(208, 188, 255, 0.15);">
+            <div style="text-align: center; margin-bottom: 32px;">
+                <h2 style="font-size: 2em; margin-bottom: 8px; color: var(--md-sys-color-primary);">
+                    🎉 Abstimmungsergebnisse 🎉
+                </h2>
+            </div>
+            
+            <div style="max-height: 400px; overflow-y: auto;">
+                ${resultsHTML}
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('show');
+}
+
+async function resetVoting() {
+    try {
+        const SHEETS_ID = getCookie('sheets_id');
+        
+        // Clear all ready states and votes
+        const clearRange = `${SHEETS_NAME}!I3:Z1000`;
+        await gapi.client.sheets.spreadsheets.values.clear({
+            spreadsheetId: SHEETS_ID,
+            range: clearRange
+        });
+        
+        // Reset local state
+        isVoteCompleted = false;
+        isVotingMode = false;
+        userVotes = {};
+        votingResults = null;
+        
+        // Update UI
+        updateVotingModeUI();
+        hideBookModal();
+        
+        showSuccess('Abstimmung zurückgesetzt. Eine neue Abstimmung kann gestartet werden.');
+        
+    } catch (error) {
+        console.error('Error resetting voting:', error);
+        showError('Fehler beim Zurücksetzen der Abstimmung: ' + error.message);
+    }
+}
+
 // Rendering functions
 function renderBooks() {
     const booksList = document.getElementById('booksList');
@@ -1123,20 +1704,17 @@ function renderBooks() {
     }
     booksList.style.display = 'grid'; // Reset to grid for normal book display
     
-    // Sort books by like count (descending) and then by date (newest first)
-    const sortedBooks = filteredBooks.sort((a, b) => {
-        if (b.likes.length !== a.likes.length) {
-            return b.likes.length - a.likes.length;
-        }
-        return new Date(b.suggestedAt) - new Date(a.suggestedAt);
-    });
+    // No sorting needed - display books in the order they appear in the sheet
+    const sortedBooks = filteredBooks;
     
     booksList.innerHTML = sortedBooks.map(book => renderBookCard(book)).join('');
 }
 
 function renderBookCard(book) {
-    const userHasLiked = book.likes.some(like => like.user === currentUser);
     const isMyBook = book.suggestedBy === currentUser;
+    const bookId = `${book.title}|${book.author}`; // Simple book ID
+    const hasVoted = userVotes[bookId];
+    const votedPoints = hasVoted ? userVotes[bookId] : null;
     
     // Build bottom tags HTML (Jahr, Seitenzahl, Genres)
     let tagsHTML = '';
@@ -1165,33 +1743,51 @@ function renderBookCard(book) {
         tagsHTML = `<div class="md3-book-card-tags">${tags.join('')}</div>`;
     }
 
-    const charLimit = 300;
+    const charLimit = 200;
+    
+    // Build voting buttons HTML - only show if voting is active and not completed
+    let votingHTML = '';
+    if (isVotingMode && !isVoteCompleted) {
+        const usedPoints = Object.values(userVotes);
+        const allPoints = [3, 2, 1];
+        
+        const buttonHTML = allPoints.map(points => {
+            const isVotedForThisBook = hasVoted && votedPoints === points;
+            
+            if (isVotedForThisBook) {
+                // This book has this vote - clicking will remove it
+                return `<button class="md3-vote-number md3-vote-number-selected md3-vote-${points}" onclick="castVote('${escapeJsString(book.title)}', '${escapeJsString(book.author)}', ${points})">${points}</button>`;
+            } else {
+                // Available to vote - clicking will either add vote or replace existing vote
+                return `<button class="md3-vote-number md3-vote-number-available md3-vote-${points}" onclick="castVote('${escapeJsString(book.title)}', '${escapeJsString(book.author)}', ${points})">${points}</button>`;
+            }
+        }).join('');
+        
+        votingHTML = `
+            <div class="md3-voting-buttons">
+                ${buttonHTML}
+            </div>
+        `;
+    }
     
     return `
-        <div class="md3-book-card" onclick="showBookModal('${escapeJsString(book.title)}', '${escapeJsString(book.author)}')">
-            <div class="md3-book-card-content">
-                <h3 class="md3-book-card-title">${escapeHtml(book.title)}</h3>
-                <div class="md3-book-card-author">${escapeHtml(book.author)}</div>
-                
-                ${book.description ? `<div class="md3-book-card-description">${escapeHtml(book.description.length > charLimit ? book.description.substring(0, charLimit-3) + '...' : book.description)}</div>` : ''}
-                
-                ${tagsHTML}
+        <div class="md3-book-card ${isVotingMode ? 'md3-book-card-voting' : ''}">
+            <div class="md3-book-card-content" ${!isVotingMode ? `onclick="showBookModal('${escapeJsString(book.title)}', '${escapeJsString(book.author)}')"`  : ''}>
+                <div class="md3-book-card-main" ${isVotingMode ? `onclick="showBookModal('${escapeJsString(book.title)}', '${escapeJsString(book.author)}')"`  : ''}>
+                    <h3 class="md3-book-card-title">${escapeHtml(book.title)}</h3>
+                    <div class="md3-book-card-author">${escapeHtml(book.author)}</div>
+                    
+                    ${book.description ? `<div class="md3-book-card-description">${escapeHtml(book.description.length > charLimit ? book.description.substring(0, charLimit-3) + '...' : book.description)}</div>` : ''}
+                    
+                    ${tagsHTML}
+                </div>
             </div>
             
             <div class="md3-book-card-footer">
                 <div class="md3-book-card-suggested-by">
                     ${escapeHtml(book.suggestedBy)}
                 </div>
-                
-                <div class="md3-book-card-heart-section">
-                    <button 
-                        class="md3-heart-button-combined ${userHasLiked ? 'md3-heart-button-liked' : ''}"
-                        onclick="event.stopPropagation(); toggleLike('${escapeJsString(book.title)}', '${escapeJsString(book.author)}')"
-                    >
-                        <span class="md3-heart-icon">${userHasLiked ? '❤️' : '🤍'}</span>
-                        <span class="md3-heart-count">${book.likes.length}</span>
-                    </button>
-                </div>
+                ${votingHTML}
             </div>
         </div>
     `;
@@ -1202,8 +1798,6 @@ function getFilteredBooks() {
     
     // Apply category filter
     switch (currentFilter) {
-        case 'liked':
-            return filteredBooks.filter(book => book.likes.some(like => like.user === currentUser));
         case 'all':
             return filteredBooks;
         default:
@@ -1214,13 +1808,6 @@ function getFilteredBooks() {
 
 function getEmptyStateHTML() {
     switch (currentFilter) {
-        case 'liked':
-            return `
-                <div class="md3-empty-state" style="text-align: center; max-width: 600px; padding: 48px 16px;">
-                    <h3>Noch keine Favoriten</h3>
-                    <p>Du hast noch keine Bücher geliket. Durchstöbere alle Bücher und like deine Favoriten!</p>
-                </div>
-            `;
         case 'all':
             return `
                 <div class="md3-empty-state" style="text-align: center; max-width: 600px; padding: 48px 16px;">
@@ -1241,6 +1828,10 @@ function getEmptyStateHTML() {
 
 // Filter functions
 function setActiveFilter(filter) {
+    // If someone tries to set 'liked' filter, default to 'all'
+    if (filter === 'liked') {
+        filter = 'all';
+    }
     currentFilter = filter;
     renderBooks(); // This will update the tabs and show the active state
 }
@@ -1256,10 +1847,6 @@ function updateTabsWithUsers() {
             <button class="md3-tab ${currentFilter === 'all' ? 'md3-tab-active' : ''}" data-filter="all">
                 <span class="material-icons-round">library_books</span>
                 <span>Alle Bücher</span>
-            </button>
-            <button class="md3-tab ${currentFilter === 'liked' ? 'md3-tab-active' : ''}" data-filter="liked">
-                <span class="material-icons-round">favorite</span>
-                <span>Favoriten</span>
             </button>
         </div>
         <div class="md3-tabs-right">
