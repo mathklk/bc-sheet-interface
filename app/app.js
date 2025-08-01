@@ -1079,11 +1079,7 @@ function updateModalContent() {
                 </div>
                 <div class="md3-book-detail-author" style="font-size: 1.2em; margin-bottom: 24px; font-weight: 500; color: var(--md-sys-color-on-surface-variant);">${escapeHtml(book.author)}</div>
                 
-                ${book.description ? `
-                    <div class="md3-book-detail-description" style="margin: 24px 0; font-size: 1.1em; text-align: justify; line-height: 1.5; white-space: pre-line;">
-                        ${escapeHtml(book.description)}
-                    </div>
-                ` : ''}
+                ${book.description ? `<div class="md3-book-detail-description" style="margin: 12px 0; font-size: 1.1em; text-align: justify; line-height: 1.5; white-space: pre-line;">${escapeHtml(book.description.trim())}</div>` : ''}
                 
                 <div class="md3-book-detail-tags" style="margin: 24px 0; display: flex; flex-wrap: wrap; gap: 8px;">
                     ${book.year ? `
