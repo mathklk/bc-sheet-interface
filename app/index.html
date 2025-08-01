@@ -198,8 +198,7 @@
                         
                         <md-outlined-text-field 
                             id="editBookYear" 
-                            label="Erscheinungsjahr"
-                            type="number" 
+                            label="Jahr"
                             min="1800" 
                             max="2030"
                             class="md3-field-year">
@@ -208,7 +207,6 @@
                         <md-outlined-text-field 
                             id="editBookPages" 
                             label="Seitenzahl"
-                            type="number" 
                             min="1"
                             class="md3-field-pages">
                         </md-outlined-text-field>
@@ -240,6 +238,16 @@
             <div class="md3-top-app-bar-content">
                 <span class="material-icons-round md3-top-app-bar-leading-icon">book</span>
                 <h1 class="md3-top-app-bar-headline">BuVoWerk - Buch-Vorschlags Werkzeug</h1>
+                <div class="md3-top-app-bar-actions">
+                    <button id="addBookModalBtn" class="md3-button md3-button-filled">
+                        <span class="material-icons-round">add_circle</span>
+                        <span>Buch vorschlagen</span>
+                    </button>
+                    <button id="votingModeBtn" class="md3-button md3-button-outlined">
+                        <span class="material-icons-round">how_to_vote</span>
+                        <span>Abstimmungsmodus</span>
+                    </button>
+                </div>
                 <div class="md3-top-app-bar-trailing" id="userInfo">
                     <span class="md3-top-app-bar-user-text">Hallo, <strong id="currentUser"></strong>!</span>
                     <button id="logoutBtn" class="md3-icon-button" title="Ausloggen">
@@ -251,97 +259,6 @@
 
         <!-- Main Content -->
         <main class="md3-main-content">
-            <!-- Add Book Section -->
-            <section class="md3-card md3-add-book-card" id="addBookSection">
-                <div class="md3-card-content">
-                    <div class="md3-card-header" id="addBookHeader" style="cursor: pointer;">
-                        <div class="md3-card-header-content">
-                            <span class="material-icons-round md3-card-icon">edit_note</span>
-                            <div class="md3-card-header-text">
-                                <h2 class="md3-card-headline">Neues Buch vorschlagen</h2>
-                                <!-- <p class="md3-card-subhead">Teile deine Buchempfehlung mit der Gruppe</p> -->
-                            </div>
-                        </div>
-                        <button type="button" class="md3-icon-button" id="toggleFormBtn">
-                            <span class="material-icons-round" id="toggleFormIcon">expand_more</span>
-                        </button>
-                    </div>
-                    
-                    <div class="md3-form-container" id="addBookFormContainer" style="display: none;">
-                        <form class="md3-add-book-form" id="addBookForm">
-                        <div class="md3-form-row md3-form-row-primary">
-                            <md-outlined-text-field 
-                                id="bookTitle" 
-                                label="Buchtitel" 
-                                required
-                                class="md3-field-title-primary">
-                                <span slot="leading-icon" class="material-icons-round">menu_book</span>
-                            </md-outlined-text-field>
-                            
-                            <md-outlined-text-field 
-                                id="bookAuthor" 
-                                label="Autor/in" 
-                                required
-                                class="md3-field-author-primary">
-                                <span slot="leading-icon" class="material-icons-round">person</span>
-                            </md-outlined-text-field>
-                        </div>
-
-                        <div class="md3-form-row md3-form-row-details">
-                            <md-outlined-text-field 
-                                id="bookGenre" 
-                                label="Genre" 
-                                class="md3-field-genre-enhanced">
-                                <span slot="leading-icon" class="material-icons-round">category</span>
-                            </md-outlined-text-field>
-                            
-                            <md-outlined-text-field 
-                                id="bookYear" 
-                                label="Erscheinungsjahr"
-                                type="number" 
-                                min="1800" 
-                                max="2030"
-                                class="md3-field-year-enhanced">
-                                <span slot="leading-icon" class="material-icons-round">calendar_today</span>
-                            </md-outlined-text-field>
-                            
-                            <md-outlined-text-field 
-                                id="bookPages" 
-                                label="Seitenzahl"
-                                type="number" 
-                                min="1"
-                                class="md3-field-pages-enhanced">
-                                <span slot="leading-icon" class="material-icons-round">description</span>
-                            </md-outlined-text-field>
-                        </div>
-
-                        <md-outlined-text-field 
-                            id="bookDescription" 
-                            label="Kurzbeschreibung"
-                            type="textarea" 
-                            rows="4"
-                            class="md3-field-description-enhanced"
-                            maxlength="1000">
-                            <span slot="leading-icon" class="material-icons-round">rate_review</span>
-                        </md-outlined-text-field>
-
-                        <!-- Actions -->
-                        <div class="md3-form-actions">
-                            <button type="button" id="clearFormBtn" class="md3-button md3-button-outlined">
-                                <span class="material-icons-round">clear</span>
-                                <span>Zurücksetzen</span>
-                            </button>
-                            
-                            <button type="submit" id="addBookBtn" class="md3-button md3-button-filled md3-button-primary">
-                                <span class="material-icons-round">add_circle</span>
-                                <span>Vorschlag einreichen</span>
-                            </button>
-                        </div>
-                        </form>
-                    </div>
-                </div>
-            </section>
-
             <!-- Books List Section -->
             <section class="md3-books-section">
                 <div class="md3-section-header">
@@ -364,10 +281,6 @@
                                     </label>
                                 </div>
                             </div>
-                            <button id="votingModeBtn" class="md3-button md3-button-outlined" title="Abstimmungsmodus">
-                                <span class="material-icons-round">how_to_vote</span>
-                                <span>Abstimmen</span>
-                            </button>
                             <button id="refreshBtn" class="md3-icon-button" title="Aktualisieren">
                                 <span class="material-icons-round">refresh</span>
                             </button>
@@ -385,6 +298,85 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Add Book Modal -->
+    <div id="addBookModal" class="md3-scrim">
+        <div class="md3-dialog md3-dialog-add-book">
+            <div class="md3-dialog-header">
+                <span class="material-icons-round md3-dialog-icon">edit_note</span>
+                <h2 class="md3-dialog-headline">Neuer Buchvorschlag </h2>
+            </div>
+            
+            <div class="md3-dialog-content">
+                <form class="md3-add-book-form" id="addBookForm">
+                    <div class="md3-form-row md3-form-row-primary">
+                        <md-outlined-text-field 
+                            id="bookTitle" 
+                            label="Buchtitel" 
+                            required
+                            class="md3-field-title-primary">
+                            <span slot="leading-icon" class="material-icons-round">menu_book</span>
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookAuthor" 
+                            label="Autor/in" 
+                            required
+                            class="md3-field-author-primary">
+                            <span slot="leading-icon" class="material-icons-round">person</span>
+                        </md-outlined-text-field>
+                    </div>
+
+                    <div class="md3-form-row md3-form-row-details">
+                        <md-outlined-text-field 
+                            id="bookGenre" 
+                            label="Genre" 
+                            class="md3-field-genre-enhanced">
+                            <span slot="leading-icon" class="material-icons-round">category</span>
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookYear" 
+                            label="Jahr"
+                            min="1800" 
+                            max="2030"
+                            class="md3-field-year-enhanced">
+                            <span slot="leading-icon" class="material-icons-round">calendar_today</span>
+                        </md-outlined-text-field>
+                        
+                        <md-outlined-text-field 
+                            id="bookPages" 
+                            label="Seitenzahl"
+                            min="1"
+                            class="md3-field-pages-enhanced">
+                            <span slot="leading-icon" class="material-icons-round">description</span>
+                        </md-outlined-text-field>
+                    </div>
+
+                    <md-outlined-text-field 
+                        id="bookDescription" 
+                        label="Kurzbeschreibung"
+                        type="textarea" 
+                        rows="4"
+                        class="md3-field-description-enhanced"
+                        maxlength="1000">
+                        <span slot="leading-icon" class="material-icons-round">rate_review</span>
+                    </md-outlined-text-field>
+                </form>
+            </div>
+            
+            <div class="md3-dialog-actions">
+                <button type="button" id="clearFormBtn" class="md3-button md3-button-outlined">
+                    <span class="material-icons-round">clear</span>
+                    <span>Zurücksetzen</span>
+                </button>
+                <button type="submit" form="addBookForm" id="submitBookBtn" class="md3-button md3-button-filled">
+                    <span class="material-icons-round">add_circle</span>
+                    <span>Vorschlag einreichen</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Book Detail Modal -->

@@ -60,7 +60,6 @@ let isAddingBook = false; // Prevent multiple simultaneous book additions
 let userVotes = {}; // Only store current user's votes: { points: bookId, ... }
 let isVotingMode = false; // Toggle between normal and voting mode
 let votingPhase = false; // Whether voting is currently active
-let isFormCollapsed = true; // Form is collapsed by default
 let readyCheckInterval = null; // Interval for checking if all users are ready
 let isVoteCompleted = false; // Whether voting has been completed
 let votingResults = null; // Store the voting results
@@ -123,14 +122,6 @@ function initializeApp() {
         SHEETS_URL = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/edit`;
     }
     
-    // Initialize form as collapsed
-    const addBookFormContainer = document.getElementById('addBookFormContainer');
-    const toggleFormIcon = document.getElementById('toggleFormIcon');
-    if (addBookFormContainer && toggleFormIcon) {
-        addBookFormContainer.style.display = 'none';
-        toggleFormIcon.textContent = 'expand_more';
-    }
-    
     // Initialize Google API is handled in handleInviteRoute
     // The rest of the initialization will be called from onAuthSuccess
     
@@ -159,6 +150,9 @@ function setupEventListeners() {
         }
     });
     
+    // Add Book Modal functionality
+    document.getElementById('addBookModalBtn').addEventListener('click', showAddBookModal);
+    
     // Clear form button
     document.getElementById('clearFormBtn').addEventListener('click', clearForm);
     
@@ -185,31 +179,6 @@ function setupEventListeners() {
         refreshBtn.addEventListener('click', function() {
             loadBooks();
             showSuccess('Vorschläge werden geladen...');
-        });
-    }
-    
-    // Form collapse/expand functionality
-    const addBookHeader = document.getElementById('addBookHeader');
-    const toggleFormBtn = document.getElementById('toggleFormBtn');
-    const toggleFormIcon = document.getElementById('toggleFormIcon');
-    const addBookFormContainer = document.getElementById('addBookFormContainer');
-    
-    if (addBookHeader && toggleFormBtn) {
-        const toggleForm = () => {
-            isFormCollapsed = !isFormCollapsed;
-            if (isFormCollapsed) {
-                addBookFormContainer.style.display = 'none';
-                toggleFormIcon.textContent = 'expand_more';
-            } else {
-                addBookFormContainer.style.display = 'block';
-                toggleFormIcon.textContent = 'expand_less';
-            }
-        };
-        
-        addBookHeader.addEventListener('click', toggleForm);
-        toggleFormBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleForm();
         });
     }
     
@@ -449,11 +418,9 @@ function copyInviteLink() {
 // UI Mode functions
 function updateUIForUserMode() {
     const userInfo = document.getElementById('userInfo');
-    const addBookSection = document.getElementById('addBookSection');
     
     // Show normal user UI
     userInfo.style.display = 'flex';
-    addBookSection.style.display = 'block';
     
     document.getElementById('currentUser').textContent = currentUser;
     
@@ -484,7 +451,6 @@ function logout() {
     
     // Hide user info and show config modal if no configuration is present
     document.getElementById('userInfo').style.display = 'none';
-    document.getElementById('addBookSection').style.display = 'none';
     
     const SHEETS_ID = getCookie('sheets_id');
     if (!SHEETS_ID || !SHEETS_NAME || !CLIENT_ID) {
@@ -696,8 +662,8 @@ async function parseGoogleSheetsData(rows) {
         const book = {
             title: row[2] || '',           // Buchtitel
             author: row[3] || '',          // Autor
-            year: row[4] ? parseInt(row[4]) : null,  // Jahr
-            pages: row[5] ? parseInt(row[5]) : null, // Seitenzahl
+            year: row[4] || '',            // Jahr - keep as string
+            pages: row[5] || '',           // Seitenzahl - keep as string
             description: row[7] || '',      // Kurzbeschreibung
             genres: row[6] || '',          // Genres
             suggestedBy: row[0] || 'Unbekannt' // SuggestedBy
@@ -740,6 +706,25 @@ async function appendBookToSheet(book) {
         
         const existingRows = readResponse.result.values || [];
         
+        // Also read the user names row to determine the result column
+        const usersRange = `${SHEETS_NAME}!I4:Z4`; // Names are in row 4, starting from column I
+        const usersResponse = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: spreadsheetId,
+            range: usersRange,
+        });
+        
+        const userNames = usersResponse.result.values?.[0] || [];
+        
+        // Find the last user column and determine result column
+        let lastUserColumnIndex = -1;
+        for (let i = 0; i < userNames.length; i++) {
+            if (userNames[i] && userNames[i].trim() && userNames[i].trim() !== "Ergebnis") {
+                lastUserColumnIndex = i;
+            } else {
+                break; // Stop at first empty or "Ergebnis" column
+            }
+        }
+        
         // Find the last row for this user or determine where to insert
         let insertRowIndex = findInsertionRowForUser(existingRows, book.suggestedBy);
         
@@ -750,8 +735,8 @@ async function appendBookToSheet(book) {
             '',                  // Funfacts (Column B) - leave empty for now
             book.title,          // Buchtitel (Column C)
             book.author,         // Autor (Column D)
-            book.year ? parseInt(book.year) : '',     // Jahr (Column E) - convert to number or empty
-            book.pages ? parseInt(book.pages) : '',   // Seitenzahl (Column F) - convert to number or empty
+            book.year || '',     // Jahr (Column E) - keep as string
+            book.pages || '',    // Seitenzahl (Column F) - keep as string
             book.genre || '',    // Genres (Column G)
             book.description || '' // Kurzbeschreibung (Column H)
         ]];
@@ -803,6 +788,29 @@ async function appendBookToSheet(book) {
                 values: values
             }
         });
+        
+        // Add SUM formula to result column if users exist
+        if (lastUserColumnIndex >= 0) {
+            const resultColumnIndex = lastUserColumnIndex + 1; // Next column after last user
+            const resultColumnLetter = String.fromCharCode(73 + resultColumnIndex); // 73 = 'I'
+            const firstUserColumnLetter = 'I'; // First user column is always I
+            const lastUserColumnLetter = String.fromCharCode(73 + lastUserColumnIndex); // Last user column
+            const resultRowNumber = insertRowIndex + 5; // Adjust for header rows
+            
+            const sumFormula = `=SUM(${firstUserColumnLetter}${resultRowNumber}:${lastUserColumnLetter}${resultRowNumber})`;
+            const resultRange = `${SHEETS_NAME}!${resultColumnLetter}${resultRowNumber}`;
+            
+            await gapi.client.sheets.spreadsheets.values.update({
+                spreadsheetId: spreadsheetId,
+                range: resultRange,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [[sumFormula]]
+                }
+            });
+            
+            // console.log('Added SUM formula:', sumFormula, 'to', resultRange);
+        }
         
         console.log('Successfully inserted book at row', insertRowIndex + 5, ':', updateResponse.result);
         return true;
@@ -936,15 +944,9 @@ async function addBook() {
         });
         
         if (success) {
-            showSuccess('Buchvorschlag erfolgreich hinzugefügt!');
-            
-            // Clear form
-            document.getElementById('bookTitle').value = '';
-            document.getElementById('bookAuthor').value = '';
-            document.getElementById('bookGenre').value = '';
-            document.getElementById('bookDescription').value = '';
-            document.getElementById('bookPages').value = '';
-            document.getElementById('bookYear').value = '';
+           // Clear form and hide modal
+            clearForm();
+            hideAddBookModal();
             
             // Reload books to show the new entry
             setTimeout(() => loadBooks(), 1000);
@@ -968,6 +970,46 @@ async function addBook() {
         isAddingBook = false;
     }
 }
+
+// Add Book Modal functions
+function showAddBookModal() {
+    // Prevent opening in voting mode
+    if (isVotingMode && !isVoteCompleted) {
+        return;
+    }
+    
+    const modal = document.getElementById('addBookModal');
+    modal.classList.add('show');
+    
+    // Clear form when opening
+    clearForm();
+    
+    // Focus on first field
+    setTimeout(() => {
+        document.getElementById('bookTitle').focus();
+    }, 100);
+    
+    // Add event listener for clicking outside modal
+    const handleOutsideClick = (e) => {
+        if (e.target === modal) {
+            hideAddBookModal();
+        }
+    };
+    modal.addEventListener('click', handleOutsideClick);
+    
+    // Remove event listener when modal is closed
+    modal.addEventListener('hide', () => {
+        modal.removeEventListener('click', handleOutsideClick);
+    }, { once: true });
+}
+
+function hideAddBookModal() {
+    const modal = document.getElementById('addBookModal');
+    // Trigger hide event to remove event listeners
+    modal.dispatchEvent(new Event('hide'));
+    modal.classList.remove('show');
+}
+
 // Modal functions
 let currentModalBook = null;
 
@@ -1118,6 +1160,11 @@ function toggleVotingMode() {
         return;
     }
     
+    // If switching to voting mode, clear "bereit" status if it exists
+    if (!isVotingMode) {
+        clearReadyStatusIfNeeded();
+    }
+    
     isVotingMode = !isVotingMode;
     updateVotingModeUI();
     renderBooks(); // Re-render books to show/hide voting buttons
@@ -1126,7 +1173,7 @@ function toggleVotingMode() {
 function updateVotingModeUI() {
     const votingModeBtn = document.getElementById('votingModeBtn');
     const votingInfo = document.getElementById('votingInfo');
-    const addBookSection = document.getElementById('addBookSection');
+    const addBookBtn = document.getElementById('addBookModalBtn');
     
     // Check if voting is completed
     if (isVoteCompleted) {
@@ -1134,23 +1181,41 @@ function updateVotingModeUI() {
         votingModeBtn.classList.add('md3-button-outlined');
         votingModeBtn.innerHTML = '<span class="material-icons-round">poll</span><span>Ergebnisse anzeigen</span>';
         votingInfo.style.display = 'none';
-        addBookSection.style.display = 'block';
+        
+        // Re-enable add book button when voting is completed
+        if (addBookBtn) {
+            addBookBtn.disabled = false;
+            addBookBtn.style.opacity = '1';
+            addBookBtn.style.cursor = 'pointer';
+        }
         return;
     }
     
     if (isVotingMode) {
         votingModeBtn.classList.add('md3-button-filled');
         votingModeBtn.classList.remove('md3-button-outlined');
-        votingModeBtn.innerHTML = '<span class="material-icons-round">close</span><span>Abstimmen beenden</span>';
+        votingModeBtn.innerHTML = '<span class="material-icons-round">close</span><span>Abstimmungsmodus</span>';
         votingInfo.style.display = 'flex';
-        addBookSection.style.display = 'none'; // Hide form during voting
         updateVotingCounter();
+        
+        // Disable add book button in voting mode
+        if (addBookBtn) {
+            addBookBtn.disabled = true;
+            addBookBtn.style.opacity = '0.5';
+            addBookBtn.style.cursor = 'not-allowed';
+        }
     } else {
         votingModeBtn.classList.remove('md3-button-filled');
         votingModeBtn.classList.add('md3-button-outlined');
-        votingModeBtn.innerHTML = '<span class="material-icons-round">how_to_vote</span><span>Abstimmen</span>';
+        votingModeBtn.innerHTML = '<span class="material-icons-round">how_to_vote</span><span>Abstimmungsmodus</span>';
         votingInfo.style.display = 'none';
-        addBookSection.style.display = 'block'; // Show form when not voting
+        
+        // Re-enable add book button when exiting voting mode
+        if (addBookBtn) {
+            addBookBtn.disabled = false;
+            addBookBtn.style.opacity = '1';
+            addBookBtn.style.cursor = 'pointer';
+        }
         
         // Reset ready toggle when exiting voting mode
         const readyToggle = document.getElementById('readyToggle');
@@ -1195,6 +1260,62 @@ function updateVotingCounter() {
         }
     } else {
         readyToggle.style.display = 'none';
+    }
+}
+
+async function clearReadyStatusIfNeeded() {
+    try {
+        const SHEETS_ID = getCookie('sheets_id');
+        if (!SHEETS_ID || !SHEETS_NAME || !CLIENT_ID) {
+            return; // Skip if not configured
+        }
+        
+        if (!gapi.client.getToken()) {
+            return; // Skip if not authenticated
+        }
+        
+        // Get current user's status
+        const usersRange = `${SHEETS_NAME}!I3:Z4`; // Row 3 for ready status, row 4 for names
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: SHEETS_ID,
+            range: usersRange,
+        });
+        
+        const data = response.result.values || [];
+        const readyRow = data[0] || [];
+        const nameRow = data[1] || [];
+        
+        // Find current user's column
+        let userColumnIndex = -1;
+        for (let i = 0; i < nameRow.length; i++) {
+            if (nameRow[i] && nameRow[i].trim() === currentUser) {
+                userColumnIndex = i;
+                break;
+            }
+        }
+        
+        // If user found and status is "bereit", clear it
+        if (userColumnIndex >= 0) {
+            const currentStatus = readyRow[userColumnIndex] ? readyRow[userColumnIndex].trim() : '';
+            if (currentStatus === 'bereit') {
+                const columnLetter = String.fromCharCode(73 + userColumnIndex); // 73 = 'I'
+                const readyCell = `${SHEETS_NAME}!${columnLetter}3`;
+                
+                await gapi.client.sheets.spreadsheets.values.update({
+                    spreadsheetId: SHEETS_ID,
+                    range: readyCell,
+                    valueInputOption: 'USER_ENTERED',
+                    resource: {
+                        values: [['']] // Clear the cell
+                    }
+                });
+                
+                console.log('Cleared "bereit" status when starting voting');
+            }
+        }
+    } catch (error) {
+        console.error('Error clearing ready status:', error);
+        // Don't throw error to prevent disrupting voting start
     }
 }
 
@@ -1498,6 +1619,14 @@ async function calculateFinalResults() {
     const rows = votingResponse.result.values || [];
     const userNames = usersResponse.result.values?.[0] || [];
     const results = {};
+    const userVoteValidation = {}; // Track votes per user for validation
+    
+    // Initialize vote validation tracking
+    userNames.forEach((userName, index) => {
+        if (userName && userName.trim() && userName.trim() !== "Ergebnis") {
+            userVoteValidation[userName.trim()] = [];
+        }
+    });
     
     // Calculate total points for each book and track votes
     for (let i = 0; i < rows.length; i++) {
@@ -1534,9 +1663,42 @@ async function calculateFinalResults() {
                 // Add voter details with initial and points
                 const initial = userName.trim().charAt(0).toUpperCase();
                 results[bookId].voterDetails.push({ initial, points });
+                
+                // Track user's votes for validation
+                if (userVoteValidation[userName.trim()]) {
+                    userVoteValidation[userName.trim()].push(points);
+                }
             }
         }
     }
+    
+    // Validate votes: each user should have exactly one vote of 1, 2, and 3
+    const invalidVotes = [];
+    Object.keys(userVoteValidation).forEach(userName => {
+        const votes = userVoteValidation[userName];
+        const sortedVotes = votes.slice().sort((a, b) => a - b);
+        
+        if (votes.length === 0) {
+            // User didn't vote at all - this is allowed
+            return;
+        }
+        
+        if (votes.length !== 3 || sortedVotes.join(',') !== '1,2,3') {
+            invalidVotes.push({
+                user: userName,
+                votes: votes,
+                issue: votes.length !== 3 ? 
+                    `${votes.length} Stimmen abgegeben (erwartet: 3)` : 
+                    `Ungültige Punkteverteilung: ${votes.join(', ')} (erwartet: 1, 2, 3)`
+            });
+        }
+    });
+    
+    // Store validation results
+    results._validation = {
+        isValid: invalidVotes.length === 0,
+        invalidVotes: invalidVotes
+    };
     
     return results;
 }
@@ -1554,6 +1716,38 @@ async function calculateAndShowResults() {
 
 function showVotingResults() {
     if (!votingResults) return;
+    
+    // Check for validation issues
+    const validation = votingResults._validation;
+    let validationWarningHTML = '';
+    
+    if (validation && !validation.isValid) {
+        const warningDetails = validation.invalidVotes.map(invalid => 
+            `<li><strong>${escapeHtml(invalid.user)}:</strong> ${escapeHtml(invalid.issue)}</li>`
+        ).join('');
+        
+        validationWarningHTML = `
+            <div style="
+                background: var(--md-sys-color-error-container);
+                color: var(--md-sys-color-on-error-container);
+                padding: 16px;
+                border-radius: 12px;
+                margin-bottom: 24px;
+                border: 1px solid var(--md-sys-color-error);
+            ">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <span class="material-icons-round" style="color: var(--md-sys-color-error);">warning</span>
+                    <strong>Ungültige Abstimmungen erkannt!</strong>
+                </div>
+                <div style="font-size: 0.9em; line-height: 1.4;">
+                    Die folgenden Abstimmungen entsprechen nicht den Regeln (jeder Abstimmer sollte genau einmal 1, 2 und 3 Punkte vergeben):
+                </div>
+                <ul style="margin: 8px 0 0 20px; font-size: 0.9em;">
+                    ${warningDetails}
+                </ul>
+            </div>
+        `;
+    }
     
     // Convert results to array and sort by total points
     const sortedResults = Object.values(votingResults)
@@ -1649,6 +1843,8 @@ function showVotingResults() {
                     🎉 Abstimmungsergebnisse 🎉
                 </h2>
             </div>
+            
+            ${validationWarningHTML}
             
             <div style="max-height: 400px; overflow-y: auto;">
                 ${resultsHTML}
