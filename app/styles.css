@@ -1143,9 +1143,18 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   }
   
   .md3-top-app-bar-actions {
-    flex-direction: column;
-    gap: 8px;
-    margin-right: 8px;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 6px;
+    margin: 0;
+    flex: 1;
+  }
+  
+  .md3-top-app-bar-actions .md3-button {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    min-width: auto;
   }
   
   .md3-top-app-bar-actions .md3-button span:last-child {
@@ -1153,14 +1162,17 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   }
   
   .md3-top-app-bar-trailing {
-    flex-direction: column-reverse;
-    align-items: flex-end;
+    flex-direction: row;
+    align-items: center;
     gap: 4px;
   }
   
   .md3-top-app-bar-user-text {
-    font-size: 12px;
-    margin: 0;
+    display: none;
+  }
+  
+  .md3-section-headline {
+    display: none;
   }
   
   .md3-main-content {
@@ -1227,34 +1239,70 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   }
   
   .md3-tabs {
-    flex-direction: column;
-    gap: 8px;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  
+  .md3-tabs::-webkit-scrollbar {
+    display: none;
   }
   
   .md3-tabs-left,
   .md3-tabs-right {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 4px;
   }
   
   .md3-tab {
     padding: 8px 12px;
     font-size: 12px;
+    min-width: auto;
+    flex-shrink: 0;
   }
   
   .md3-tab-user {
     font-size: 11px;
     padding: 6px 10px;
+    flex-shrink: 0;
   }
   
   .md3-dialog {
     width: 95%;
-    margin: 16px;
+    margin: 8px;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .md3-dialog-add-book {
+    width: 95%;
+    max-width: none;
+    max-height: 95vh;
+  }
+  
+  .md3-dialog-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 16px 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .md3-dialog-header {
+    padding: 16px 16px 8px;
+    flex-shrink: 0;
+  }
+  
+  .md3-dialog-actions {
+    padding: 8px 16px 16px;
+    flex-shrink: 0;
   }
   
   .md3-dialog-fullscreen {
     width: 95%;
-    max-height: 85vh;
+    max-height: 95vh;
   }
   
   .md3-book-card-tags {
@@ -1267,13 +1315,23 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   }
   
   .md3-book-card-footer {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
   }
   
   .md3-book-card-heart-section {
-    align-self: flex-end;
+    align-self: auto;
+    flex-shrink: 0;
+  }
+  
+  .md3-book-card-suggested-by {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 }
 
@@ -1334,6 +1392,69 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   .md3-text-field textarea:not(:placeholder-shown) + .md3-text-field-label {
     top: 4px;
     font-size: 10px;
+  }
+
+  .md3-dialog {
+    width: 98%;
+    margin: 4px;
+    max-height: 98vh;
+    border-radius: 16px;
+  }
+  
+  .md3-dialog-add-book {
+    width: 98%;
+    max-height: 98vh;
+  }
+  
+  .md3-dialog-content {
+    padding: 0 12px 12px;
+  }
+  
+  .md3-dialog-header {
+    padding: 12px 12px 8px;
+  }
+  
+  .md3-dialog-actions {
+    padding: 8px 12px 12px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .md3-dialog-actions .md3-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .md3-section-headline {
+    display: none;
+  }
+  
+  .md3-section-header-top {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .md3-voting-info {
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
+  }
+  
+  .md3-voting-counter {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+  
+  .md3-ready-toggle {
+    flex-direction: row;
+    gap: 6px;
+    align-items: center;
+  }
+  
+  .md3-switch-label {
+    font-size: 11px;
   }
 }
 
@@ -1644,23 +1765,33 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   }
   
   .md3-voting-buttons {
-    gap: 6px;
+    gap: 8px;
   }
   
   .md3-vote-number {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
   }
   
   .md3-book-card-footer {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
   
   .md3-book-card-footer .md3-voting-buttons {
-    align-self: flex-end;
+    align-self: auto;
+    flex-shrink: 0;
+  }
+  
+  .md3-book-card-suggested-by {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   
   .md3-section-actions {
@@ -1669,8 +1800,34 @@ md-outlined-text-field:focus-within [slot="leading-icon"] {
   }
   
   .md3-section-header-top {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .md3-voting-info {
+    flex-direction: row;
+    gap: 12px;
+    align-items: center;
+  }
+  
+  .md3-voting-counter {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  
+  .md3-ready-toggle {
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
+  }
+  
+  .md3-switch {
+    gap: 6px;
+  }
+  
+  .md3-switch-label {
+    font-size: 12px;
   }
 }

@@ -69,6 +69,10 @@ document.addEventListener('DOMContentLoaded', function() {
     handleInviteRoute();
     initializeApp();
     setupEventListeners();
+    updateTitleForScreenSize();
+    
+    // Update title on window resize
+    window.addEventListener('resize', updateTitleForScreenSize);
 });
 
 // Handle /invite route with Google Sheets parameters
@@ -216,6 +220,18 @@ function getCookie(name) {
 
 function deleteCookie(name) {
     document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+}
+
+// Update title based on screen size
+function updateTitleForScreenSize() {
+    const titleElement = document.querySelector('.md3-top-app-bar-headline');
+    if (titleElement) {
+        if (window.innerWidth <= 768) {
+            titleElement.textContent = 'BuVoWerk';
+        } else {
+            titleElement.textContent = 'Buchvorschlag Werkzeug';
+        }
+    }
 }
 
 // Modal functions
@@ -1836,7 +1852,7 @@ function showVotingResults() {
         <div class="md3-modal-content" style="max-width: 1000px; padding: 32px; background: var(--md-sys-color-surface); border-radius: 28px; margin: 24px; box-shadow: 0 0 0 1px var(--md-sys-color-primary) inset, 0 0 20px 4px rgba(208, 188, 255, 0.15);">
             <div style="text-align: center; margin-bottom: 32px;">
                 <h2 style="font-size: 2em; margin-bottom: 8px; color: var(--md-sys-color-primary);">
-                    🎉 Abstimmungsergebnisse 🎉
+                    🎉 Ergebnis 🎉
                 </h2>
             </div>
             
